@@ -144,6 +144,27 @@ test("provenance warns on a fabricated metric and an invented skill", () => {
   assert.ok(report.warnings.some((w) => w.toLowerCase().includes("haskell")), "flags invented skill");
 });
 
+test("extracts a project URL written as a markdown link heading", () => {
+  const cv = parseCv(`# X
+
+## Projects
+
+**[CarbonProxy](https://devpost.com/software/carbonproxy)** - Python, FastAPI
+Feb 2026
+- Did a thing.
+
+**Unlinked Project** - Rust
+Jan 2026
+- Did another thing.
+`);
+  assert.equal(cv.projects.length, 2);
+  assert.equal(cv.projects[0]!.name, "CarbonProxy", "link text becomes the name");
+  assert.equal(cv.projects[0]!.url, "https://devpost.com/software/carbonproxy");
+  assert.equal(cv.projects[0]!.stack, "Python, FastAPI", "stack still parsed");
+  assert.equal(cv.projects[1]!.name, "Unlinked Project");
+  assert.equal(cv.projects[1]!.url, undefined, "plain heading has no url");
+});
+
 test("parses the real cv.md end to end", async () => {
   const cv = await parseCvFile(config.cvMasterPath);
   assert.ok(cv.experience.length >= 3);

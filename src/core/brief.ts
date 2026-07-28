@@ -34,6 +34,7 @@ export function masterCvForBrief(cv: MasterCv): unknown {
     projects: cv.projects.map((p) => ({
       id: p.id,
       name: p.name,
+      url: p.url,
       stack: p.stack,
       dates: p.dates,
       bullets: p.bullets.map((b) => ({ id: b.id, text: b.text })),
@@ -94,6 +95,7 @@ const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
     {
       "sourceId": "PRJ2",
       "name": "string",
+      "url": "string (optional) — copy the project's url from the master CV verbatim so the PDF keeps the link",
       "stack": "string (comma-separated tech)",
       "dates": "string",
       "bullets": [ { "text": "...", "sourceId": "PRJ2.1" } ]

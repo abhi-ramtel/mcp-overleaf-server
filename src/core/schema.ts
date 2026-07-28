@@ -31,6 +31,10 @@ export const TailoredExperienceSchema = z.object({
 export const TailoredProjectSchema = z.object({
   sourceId: z.string().min(1).describe("master project entry id, e.g. PRJ2"),
   name: z.string().min(1),
+  url: z
+    .string()
+    .optional()
+    .describe("project link from the master CV — pass it through so the name stays hyperlinked"),
   stack: z.string().default(""),
   dates: z.string().default(""),
   bullets: z.array(TailoredBulletSchema).min(1),

@@ -21,6 +21,7 @@ export function masterToTailored(cv: MasterCv): TailoredContent {
     projects: cv.projects.map((p) => ({
       sourceId: p.id,
       name: p.name,
+      url: p.url,
       stack: p.stack,
       dates: p.dates,
       bullets: p.bullets.map((b) => ({ text: b.text, sourceId: b.id })),

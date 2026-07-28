@@ -65,6 +65,20 @@ test("injectIntoDocument replaces section bodies but preserves head + education"
   assert.equal(out.match(/\{\{[A-Z_]+\}\}/g), null);
 });
 
+test("project urls render as \\href in both engines, plain when absent", () => {
+  const withUrl = {
+    ...CONTENT,
+    projects: [
+      { sourceId: "PRJ1", name: "Widget", url: "https://github.com/me/widget", stack: "Rust", dates: "2023", bullets: [{ text: "Built it.", sourceId: "PRJ1.1" }] },
+      { sourceId: "PRJ2", name: "Plain", stack: "Go", dates: "2022", bullets: [{ text: "Built it too.", sourceId: "PRJ2.1" }] },
+    ],
+  };
+  const out = injectIntoDocument(SAMPLE, withUrl as never);
+  assert.ok(out.includes("\\href{https://github.com/me/widget}{Widget}"), "linked project is hyperlinked");
+  assert.ok(out.includes("\\textbf{Plain}"), "unlinked project stays plain text");
+  assert.ok(!out.includes("\\href{}{Plain}"), "no empty href emitted");
+});
+
 test("the user's real main.tex is detected as native and injects cleanly", async () => {
   let mainTex: string;
   try {

@@ -39,6 +39,12 @@ export interface ProjectEntry {
   /** e.g. "PRJ1". */
   id: string;
   name: string;
+  /**
+   * Optional project URL (Devpost, GitHub, live demo). Written in cv.md as a
+   * markdown link in the heading: `**[Name](https://…)** - stack`. Rendered as
+   * \href{url}{Name} so the compiled PDF keeps the hyperlink.
+   */
+  url?: string;
   /** Free-text tech stack line, e.g. "Swift, SwiftUI, ARKit, …". */
   stack: string;
   dates: string;

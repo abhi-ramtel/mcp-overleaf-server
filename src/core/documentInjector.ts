@@ -7,7 +7,7 @@
  * family (as in the user's main.tex). Detection is via {@link isNativeDocument};
  * the placeholder renderer (latexRenderer.ts) handles {{token}} templates.
  */
-import { escapeLatex } from "./latexRenderer.js";
+import { escapeLatex, escapeUrl } from "./latexRenderer.js";
 import type { TailoredContent } from "./schema.js";
 
 /** True if the doc is a finished résumé using the \roleheading/\bul macro family. */
@@ -96,9 +96,13 @@ function renderExperience(c: TailoredContent): string {
 
 function renderProjects(c: TailoredContent): string {
   const blocks = c.projects.map((p) => {
+    // Mirrors the document's own style: \textbf{\href{url}{Name}} $|$ \emph{stack}
+    const name = p.url?.trim()
+      ? `\\href{${escapeUrl(p.url.trim())}}{${escapeLatex(p.name)}}`
+      : escapeLatex(p.name);
     const heading = p.stack.trim()
-      ? `\\projheading{\\textbf{${escapeLatex(p.name)}} $|$ \\emph{${escapeLatex(p.stack)}}}{${styleDates(p.dates)}}`
-      : `\\projheading{\\textbf{${escapeLatex(p.name)}}}{${styleDates(p.dates)}}`;
+      ? `\\projheading{\\textbf{${name}} $|$ \\emph{${escapeLatex(p.stack)}}}{${styleDates(p.dates)}}`
+      : `\\projheading{\\textbf{${name}}}{${styleDates(p.dates)}}`;
     return `${heading}\n${bulletBlock(p.bullets)}`;
   });
   return `\\vspace{-2pt}\n${blocks.join("\n\\vspace{3pt}\n\n")}\n\\vspace{-7pt}\n`;

@@ -222,12 +222,25 @@ function parseEntries(
       entry.organization = organization;
       if (location) entry.location = location;
     } else {
-      entry.name = title;
+      // A project heading may be a markdown link: **[Name](https://…)**
+      const { text, url } = splitMarkdownLink(title);
+      entry.name = text;
+      if (url) entry.url = url;
       entry.stack = remainder;
     }
     entries.push(entry);
   }
   return entries;
+}
+
+/**
+ * `[Name](https://…)` → { text: "Name", url: "https://…" }.
+ * Plain text passes through unchanged with no url.
+ */
+function splitMarkdownLink(input: string): { text: string; url?: string } {
+  const m = input.trim().match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  if (!m) return { text: input.trim() };
+  return { text: (m[1] ?? "").trim(), url: (m[2] ?? "").trim() };
 }
 
 /** "Company, City, ST" → { organization: "Company", location: "City, ST" }. */

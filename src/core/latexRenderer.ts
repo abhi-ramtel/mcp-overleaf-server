@@ -42,7 +42,7 @@ export function escapeLatex(input: string): string {
 }
 
 /** Escape a URL for use inside \href{...} (only %, #, & are structurally unsafe). */
-function escapeUrl(url: string): string {
+export function escapeUrl(url: string): string {
   return url.replace(/([%#&])/g, "\\$1");
 }
 
@@ -104,7 +104,10 @@ function renderExperience(entries: TailoredExperience[]): string {
 function renderProjects(entries: TailoredProject[]): string {
   return entries
     .map((p) => {
-      const name = escapeLatex(p.name);
+      // Keep the project name hyperlinked when the master CV supplies a URL.
+      const name = p.url?.trim()
+        ? `\\href{${escapeUrl(p.url.trim())}}{${escapeLatex(p.name)}}`
+        : escapeLatex(p.name);
       const dates = escapeLatex(p.dates);
       const heading = p.stack.trim()
         ? `{\\textbf{${name}} \\emph{$|$ ${escapeLatex(p.stack)}}}{${dates}}`
