@@ -8,7 +8,7 @@
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { config } from "../config.js";
 import { parseCvFile } from "./cvParser.js";
 import { TailoredContentSchema, checkProvenance } from "./schema.js";
@@ -22,6 +22,7 @@ import { compileTex } from "./latexCompile.js";
 import { extractKeywords, scoreCoverage, keywordGap } from "./keywords.js";
 import type { CoverageResult, GapResult } from "./keywords.js";
 import { safeResolve } from "./overleafGit.js";
+import { recordApplication } from "./tracker.js";
 
 export async function loadMasterCv(): Promise<MasterCv> {
   if (!existsSync(config.cvMasterPath)) {
@@ -98,6 +99,12 @@ export interface RenderInput {
   headerLine?: string;
   jobDescription?: string;
   compile?: boolean;
+  /** Job posting URL — recorded in the tracker. */
+  jobUrl?: string;
+  /** Short JD summary for the tracker row. */
+  jdSummary?: string;
+  /** Auto-log to the application tracker (default true when company+position are known). */
+  autoTrack?: boolean;
 }
 
 export interface RenderOutput {
@@ -111,6 +118,8 @@ export interface RenderOutput {
   provenance: ProvenanceReport;
   validation?: ValidationResult;
   ats?: { percent: number; matched: string[]; missing: string[]; gap: GapResult };
+  /** Set when the run was auto-logged to the application tracker. */
+  tracked?: { created: boolean; total: number };
   error?: string;
 }
 
@@ -213,5 +222,31 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     out.ats = { percent: cov.percent, matched: cov.matched, missing: cov.missing, gap };
   }
 
+  // 7. Auto-log to the tracker so no application goes unrecorded. Upserts on
+  //    company+position, so re-running a job updates its row instead of duplicating.
+  const canTrack = Boolean(input.company?.trim() && input.position?.trim());
+  if (canTrack && input.autoTrack !== false) {
+    try {
+      out.tracked = await recordApplication(config.trackerPath, {
+        company: input.company!.trim(),
+        position: input.position!.trim(),
+        jobLink: input.jobUrl ?? "",
+        atsScore: out.ats?.percent ?? "",
+        resumeFile: out.pdfPath ? basename(out.pdfPath) : `${base}.tex`,
+        jdSummary: input.jdSummary ?? summarizeJd(input.jobDescription),
+        status: "generated",
+      });
+    } catch {
+      // Tracking must never fail the document itself.
+    }
+  }
+
   return out;
+}
+
+/** First ~200 chars of the JD, whitespace-collapsed — a usable tracker summary. */
+function summarizeJd(jd?: string): string {
+  if (!jd?.trim()) return "";
+  const flat = jd.replace(/\s+/g, " ").trim();
+  return flat.length > 200 ? `${flat.slice(0, 197)}...` : flat;
 }

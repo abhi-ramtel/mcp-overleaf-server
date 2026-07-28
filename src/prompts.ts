@@ -47,19 +47,15 @@ export function registerPrompts(server: McpServer): void {
         `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite/shorten ` +
           "existing bullets to fit the job, keep it to one page, weave in truthful JD keywords, and cite the " +
           "sourceId for every bullet and entry. Do NOT invent anything or add numbers not in the source.",
-        `${n++}. Call \`render_and_compile\` with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}, and the same jobDescription (for ATS coverage).`,
-        `${n++}. If it reports provenance warnings or more than one page, revise the JSON and call it again.`,
-      );
-      if (wantLetter) {
-        steps.push(
-          `${n++}. Call \`render_cover_letter\` with company${position ? ", position" : ""} and 3-4 tight paragraphs: ` +
-            "why this company and role specifically (use details from the posting), the strongest proof from my " +
-            "actual experience, and a brief close. Draw only on my master CV — no invented employers, projects, " +
-            "or figures. Keep it to one page; revise if it reports more than one page.",
-        );
-      }
-      steps.push(
-        `${n++}. Call \`update_tracker\` with company, position${jobUrl ? ", jobLink" : ""}, the ATS score, the resume filename, jdSummary, and status="generated".`,
+        `${n++}. Call \`render_and_compile\` ONCE with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, and the same jobDescription (for ATS coverage).` +
+          (wantLetter
+            ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
+              "specifically (use details from the posting), the strongest proof from my actual experience, and a " +
+              "brief close — drawn only from my master CV, no invented employers, projects, or figures. This " +
+              "produces the résumé and the matching letter together."
+            : ""),
+        `${n++}. The application is logged to the tracker automatically — no separate update_tracker call is needed. ` +
+          "If the result reports provenance warnings, more than one page, or a cover-letter warning, revise and call it again.",
       );
       if (wantPush) {
         steps.push(
@@ -83,6 +79,63 @@ export function registerPrompts(server: McpServer): void {
       return {
         messages: [{ role: "user", content: { type: "text", text } }],
       };
+    },
+  );
+
+  // ── Multi-job batch ────────────────────────────────────────────────────────
+  server.registerPrompt(
+    "tailor_multiple_jobs",
+    {
+      title: "Tailor résumés for several jobs at once",
+      description:
+        "Batch mode: tailor up to 10 jobs in one go. Clusters similar roles and reuses cached work so " +
+        "you only reason once per role family instead of once per job.",
+      argsSchema: {
+        jobs: z
+          .string()
+          .describe(
+            'The jobs. Either JSON [{"company","position","jobDescription","jobUrl"}] or blocks separated ' +
+              'by a line of "---", each starting with "Company: X" / "Position: Y" then the description.',
+          ),
+        template: z.string().optional().describe('"resume" (default) or "cv"'),
+        coverLetter: z.string().optional().describe('"false" to skip cover letters (default: one per job)'),
+      },
+    },
+    ({ jobs, template, coverLetter }) => {
+      const tpl = template === "cv" ? "cv" : "resume";
+      const wantLetter = /^(true|yes|1)$/i.test(coverLetter ?? "");
+
+      const text = [
+        `Tailor my ${tpl} for each of the jobs below (max 10). Be economical: do NOT write content for every ` +
+          "job independently — follow this exactly:",
+        "",
+        `1. Parse the jobs into a list of { company, position, jobDescription, jobUrl }. Cap at 10; if more are ` +
+          "given, use the first 10 and say so.",
+        `2. Call \`batch_plan\` with that list and template="${tpl}". It deterministically clusters similar roles ` +
+          "and checks the cache, then returns the exact indices that need fresh content.",
+        "3. Write TailoredContent JSON ONLY for the indices it marks GENERATE. Do not write content for the " +
+          "others — the server resolves theirs automatically. Keep each to one page and cite a sourceId for " +
+          "every bullet and entry.",
+        "4. Call `batch_render` ONCE with all jobs: pass `content` for the generated ones, and `reuseFrom` " +
+          "(the index or cache key from the plan) for the rest. Every job is compiled and logged to the " +
+          "tracker automatically — no separate update_tracker calls needed." +
+          (wantLetter
+            ? " Also give each job a `coverLetter` in the same call so the letters are produced alongside the " +
+              "résumés; reuse the same proof points across similar roles and vary only the company-specific opening."
+            : ""),
+        "5. Report a short table: company, position, pages, ATS %, and whether it was generated or reused. " +
+          "Only revise jobs that came back with warnings or more than one page.",
+        "",
+        "Reminder: truthfulness beats keyword matching. Only reorder/rewrite/shorten/merge/remove/emphasize " +
+          "content that already exists in my master CV.",
+        "",
+        "--- JOBS ---",
+        jobs.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return { messages: [{ role: "user", content: { type: "text", text } }] };
     },
   );
 }

@@ -14,6 +14,7 @@ import { loadMasterCv, runRenderPipeline, latexToText } from "./core/pipeline.js
 import { buildTailoringBrief, masterCvForBrief } from "./core/brief.js";
 import { TailoredContentSchema, CoverLetterContentSchema } from "./core/schema.js";
 import { runCoverLetterPipeline } from "./core/coverLetter.js";
+import { planBatch, runBatch, formatPlan, MAX_BATCH_JOBS } from "./core/batch.js";
 import { extractKeywords, scoreCoverage, keywordGap } from "./core/keywords.js";
 import { recordApplication, listApplications } from "./core/tracker.js";
 import { syncRepo, commitAndPush, parseProject, redact, OverleafAccessError } from "./core/overleafGit.js";
@@ -147,9 +148,14 @@ export function registerTools(server: McpServer): void {
       description:
         "Inject TailoredContent into the LaTeX template, verify every bullet traces to the master CV " +
         "(anti-fabrication), compile to PDF, and save as <Company>_<Position>.pdf in the output dir. " +
+        "ALWAYS pass `coverLetter` too unless the user opted out — it produces the matching one-page " +
+        "letter in the same call. The application is auto-logged to the tracker. " +
         "Returns provenance warnings and, if jobDescription is given, an ATS coverage report.",
       inputSchema: {
         content: TailoredContentSchema.describe("The tailored content JSON produced from the brief"),
+        coverLetter: CoverLetterContentSchema.optional().describe(
+          "Cover letter content — pass this to generate the résumé and letter together (recommended)",
+        ),
         template: z.enum(["resume", "cv"]).optional(),
         templateFile: z
           .string()
@@ -161,6 +167,9 @@ export function registerTools(server: McpServer): void {
         outputName: z.string().optional().describe("Override the output filename base"),
         headerLine: z.string().optional().describe("Custom line under the name, e.g. 'Buffalo, NY | Open to relocation'"),
         jobDescription: z.string().optional().describe("Pass the JD to get an ATS coverage report"),
+        jobUrl: z.string().optional().describe("Job posting URL — recorded in the tracker"),
+        jdSummary: z.string().optional().describe("Short JD summary for the tracker row (auto-derived if omitted)"),
+        autoTrack: z.boolean().optional().describe("Auto-log to the tracker (default true when company+position are given)"),
         compile: z.boolean().optional().describe("Set false to only write .tex without compiling"),
       },
     },
@@ -180,6 +189,9 @@ export function registerTools(server: McpServer): void {
           outputName: args.outputName,
           headerLine: args.headerLine,
           jobDescription: args.jobDescription,
+          jobUrl: args.jobUrl,
+          jdSummary: args.jdSummary,
+          autoTrack: args.autoTrack,
           compile: args.compile,
         });
 
@@ -196,6 +208,30 @@ export function registerTools(server: McpServer): void {
         }
         if (r.validation?.warnings.length) {
           lines.push("", "LaTeX warnings:", ...r.validation.warnings.map((w) => `  • ${w}`));
+        }
+        // Cover letter in the same call, so the pair is always produced together.
+        if (args.coverLetter) {
+          const cl = await runCoverLetterPipeline({
+            content: {
+              ...args.coverLetter,
+              company: args.coverLetter.company || args.company || "",
+              position: args.coverLetter.position || args.position || "",
+            },
+          });
+          if (cl.ok) {
+            lines.push(
+              `✅ Cover letter: ${cl.pdfPath}${cl.pageCount ? ` (${cl.pageCount} page${cl.pageCount === 1 ? "" : "s"})` : ""}`,
+            );
+            if ((cl.pageCount ?? 1) > 1) lines.push("⚠️  Cover letter exceeds one page — shorten the paragraphs.");
+            for (const w of cl.claims.warnings) lines.push(`   ⚠️  ${w}`);
+          } else {
+            lines.push(`⚠️  Cover letter failed: ${cl.error}`);
+          }
+        } else {
+          lines.push("ℹ️  No cover letter generated — pass `coverLetter` to produce it in the same call.");
+        }
+        if (r.tracked) {
+          lines.push(`📋 ${r.tracked.created ? "Logged" : "Updated"} in the tracker (${r.tracked.total} total).`);
         }
         if (r.ats) {
           lines.push(
@@ -247,6 +283,101 @@ export function registerTools(server: McpServer): void {
         }
         if (r.claims.warnings.length) {
           lines.push("", "Claim warnings (verify before sending):", ...r.claims.warnings.map((w) => `  • ${w}`));
+        }
+        return ok(lines.join("\n"));
+      }),
+  );
+
+  // 4c ──────────────────────────────────────────── batch_plan
+  server.registerTool(
+    "batch_plan",
+    {
+      title: "Plan a multi-job batch (saves reasoning passes)",
+      description:
+        `Plan up to ${MAX_BATCH_JOBS} jobs at once. Deterministically clusters jobs by keyword similarity ` +
+        "and checks a cross-session cache, then tells you EXACTLY which jobs need fresh TailoredContent. " +
+        "Similar roles share one reasoning pass — write content only for the listed indices, then call " +
+        "batch_render once. Call this BEFORE writing any content for a multi-job request.",
+      inputSchema: {
+        jobs: z
+          .array(
+            z.object({
+              company: z.string(),
+              position: z.string(),
+              jobDescription: z.string(),
+              jobUrl: z.string().optional(),
+              template: z.enum(["resume", "cv"]).optional(),
+            }),
+          )
+          .min(1)
+          .max(MAX_BATCH_JOBS),
+        threshold: z.number().optional().describe("Similarity 0-1 above which jobs share content (default 0.65)"),
+        useCache: z.boolean().optional().describe("Reuse content cached from previous sessions (default true)"),
+      },
+    },
+    async ({ jobs, threshold, useCache }) =>
+      guard(async () => {
+        const plan = await planBatch(jobs, { threshold, useCache });
+        return ok(formatPlan(plan));
+      }),
+  );
+
+  // 4d ──────────────────────────────────────────── batch_render
+  server.registerTool(
+    "batch_render",
+    {
+      title: "Render, compile & log a whole batch",
+      description:
+        "Render, compile, auto-log, and cache every job in one call — no per-job round trip. " +
+        "Supply `content` only for jobs batch_plan marked GENERATE; for the rest pass `reuseFrom` " +
+        "(the batch index or cache key from the plan) and the server resolves the content itself. " +
+        "Every job is automatically written to the application tracker.",
+      inputSchema: {
+        jobs: z
+          .array(
+            z.object({
+              company: z.string(),
+              position: z.string(),
+              jobUrl: z.string().optional(),
+              jobDescription: z.string().optional().describe("For ATS scoring and caching"),
+              template: z.enum(["resume", "cv"]).optional(),
+              content: TailoredContentSchema.optional().describe("Required for GENERATE jobs"),
+              reuseFrom: z
+                .union([z.number(), z.string()])
+                .optional()
+                .describe("Batch index or cache key to copy content from"),
+              summary: z.string().optional().describe("Role-specific summary override when reusing content"),
+              headerLine: z.string().optional(),
+              coverLetter: CoverLetterContentSchema.optional().describe("Produced alongside the résumé for this job"),
+            }),
+          )
+          .min(1)
+          .max(MAX_BATCH_JOBS),
+      },
+    },
+    async ({ jobs }) =>
+      guard(async () => {
+        const r = await runBatch(jobs as never);
+        const lines = [
+          `Batch complete — ${r.succeeded}/${r.results.length} succeeded ` +
+            `(${r.generated} generated, ${r.reused} reused)${r.failed ? `, ${r.failed} failed` : ""}.`,
+          "",
+        ];
+        for (const j of r.results) {
+          if (j.ok) {
+            lines.push(
+              `  ✅ #${j.index} ${j.company} — ${j.position}` +
+                `${j.pageCount ? ` (${j.pageCount}p)` : ""}` +
+                `${j.atsPercent !== undefined ? ` · ATS ${j.atsPercent}%` : ""}` +
+                `${j.source === "reused" ? " · reused" : ""}` +
+                `${j.tracked ? " · logged" : ""}`,
+            );
+            if (j.pdfPath) lines.push(`       ${j.pdfPath}`);
+            if (j.coverLetterPath) lines.push(`       ${j.coverLetterPath}`);
+            for (const w of j.warnings) lines.push(`       ⚠️  ${w}`);
+          } else {
+            lines.push(`  ❌ #${j.index} ${j.company} — ${j.position}: ${j.error}`);
+          }
         }
         return ok(lines.join("\n"));
       }),

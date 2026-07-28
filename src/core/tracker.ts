@@ -128,6 +128,26 @@ function key(company: string, position: string): string {
   return `${company.trim().toLowerCase()}|${position.trim().toLowerCase()}`;
 }
 
+/** Delete a row by company (+ optional position). Returns how many were removed. */
+export async function removeApplication(
+  trackerPath: string,
+  company: string,
+  position?: string,
+): Promise<number> {
+  const existing = await listApplications(trackerPath);
+  const co = company.trim().toLowerCase();
+  const pos = position?.trim().toLowerCase();
+  const keep = existing.filter((r) => {
+    const sameCompany = (r.company ?? "").trim().toLowerCase() === co;
+    const samePosition = pos === undefined || (r.position ?? "").trim().toLowerCase() === pos;
+    return !(sameCompany && samePosition);
+  });
+  if (keep.length === existing.length) return 0;
+  const lines = [HEADER.join(","), ...keep.map((r) => rowToFields(r).map(csvEscape).join(","))];
+  await writeFile(trackerPath, lines.join("\n") + "\n", "utf-8");
+  return existing.length - keep.length;
+}
+
 /**
  * Upsert an application row (keyed on company+position) and rewrite the sheet.
  * Returns whether it created a new row or updated an existing one.
