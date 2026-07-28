@@ -24,4 +24,5 @@ output/*
 
 # macOS
 .DS_Store
-/output
+/outputtemplates/main.tex
+templates/main.pdf
