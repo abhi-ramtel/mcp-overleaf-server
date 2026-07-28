@@ -1,0 +1,32 @@
+# secrets & personal data
+.env
+cv.md
+
+# lockfile (per project preference)
+package-lock.json
+
+# dependencies & build
+node_modules/
+dist/
+
+# generated documents (keep the dir, ignore contents)
+output/*
+!output/.gitkeep
+
+# LaTeX aux files
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*._tectonic.tex
+
+# macOS
+.DS_Store
+
+# personal documents — your real résumé/CV stay local, never published
+templates/main.tex
+templates/main.pdf
+templates/cv.tex
+templates/cover-letter.tex

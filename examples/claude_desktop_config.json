@@ -1,0 +1,13 @@
+{
+  "//": "Copy the 'overleaf-resume' block into your client's MCP config.",
+  "//claude_desktop": "~/Library/Application Support/Claude/claude_desktop_config.json (macOS)",
+  "//note": "Prefer the built server (node dist/index.js after `npm run build`). The server reads .env from its own dir, so the env block is optional.",
+  "mcpServers": {
+    "overleaf-resume": {
+      "command": "node",
+      "args": [
+        "$PATH/dist/index.js"
+      ]
+    }
+  }
+}

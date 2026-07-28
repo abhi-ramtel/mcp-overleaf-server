@@ -1,0 +1,32 @@
+{
+  // NodeNext ESM. Relative imports MUST use the ".js" extension (even though the
+  // source is ".ts") so both `tsc` output and `tsx` dev runs resolve correctly.
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "esnext",
+    "lib": ["esnext"],
+    "types": ["node"],
+
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "resolveJsonModule": true,
+
+    // Strictness. We keep noUncheckedIndexedAccess (great for a parser), but relax
+    // exactOptionalPropertyTypes — it fights zod's `.optional()` inference for little gain.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}
