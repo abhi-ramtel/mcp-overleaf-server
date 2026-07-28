@@ -1,0 +1,27 @@
+# secrets & personal data
+.env
+cv.md
+
+# lockfile (per project preference)
+package-lock.json
+
+# dependencies & build
+node_modules/
+dist/
+
+# generated documents (keep the dir, ignore contents)
+output/*
+!output/.gitkeep
+
+# LaTeX aux files
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*._tectonic.tex
+
+# macOS
+.DS_Store
+/output

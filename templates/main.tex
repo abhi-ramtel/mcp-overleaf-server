@@ -1,0 +1,259 @@
+\documentclass[letterpaper,10.5pt]{article}
+
+%---------- PACKAGES ----------
+\usepackage{charter}          % Clean serif — more distinctive than Times
+\usepackage{microtype}        % Microtypographic refinements for tighter fit
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tabularx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{fancyhdr}
+\usepackage{multicol}
+\usepackage{marvosym}
+\usepackage{latexsym}
+\usepackage{verbatim}
+\input{glyphtounicode}
+\pdfgentounicode=1
+
+%---------- PAGE GEOMETRY ----------
+\geometry{
+  letterpaper,
+  top=0.38in,
+  bottom=0.30in,
+  left=0.50in,
+  right=0.50in
+}
+
+%---------- HEADER / FOOTER ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+%---------- COLORS ----------
+\definecolor{accent}{HTML}{C0392B}   % Deep red — professional, not loud
+\definecolor{darkgray}{HTML}{222222}
+\definecolor{midgray}{HTML}{555555}
+
+%---------- SECTION FORMATTING ----------
+\titleformat{\section}{
+  \vspace{-6pt}\scshape\raggedright\normalsize\bfseries\color{accent}
+}{}{0em}{}[\color{darkgray}\titlerule\vspace{-4pt}]
+
+%---------- LIST / TABLE SETUP ----------
+\setlength{\tabcolsep}{0in}
+\setlist[itemize]{leftmargin=*, label={}, itemsep=0pt, parsep=0pt, topsep=0pt}
+\raggedbottom
+\raggedright
+
+%---------- CUSTOM COMMANDS ----------
+
+\newcommand{\roleheading}[4]{%
+  \vspace{2pt}%
+  \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & \textbf{\small #2} \\
+    \textbf{\textit{\small #3}} & \textbf{\textit{\small #4}} \\
+  \end{tabular*}%
+}
+
+% Project header: {Name | Stack}{Date}
+\newcommand{\projheading}[2]{%
+  \vspace{2pt}%
+  \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \small #1 & \textbf{\small #2} \\
+  \end{tabular*}%
+}
+
+% Bullet
+\newcommand{\bul}[1]{%
+  \item \small{#1}\vspace{-1pt}%
+}
+
+\newcommand{\bullist}{\begin{itemize}[leftmargin=12pt, label={\tiny$\bullet$}, topsep=1pt, itemsep=0pt, parsep=0pt]}
+\newcommand{\stopbulls}{\end{itemize}\vspace{-2.75pt}}
+
+%==============================================================
+\begin{document}
+%==============================================================
+
+%---------- HEADING ----------
+\begin{center}
+  {\LARGE\bfseries Abhi Ramtel}\\\vspace{2pt}
+  \small
+  773-858-3178\ $|$\
+  \href{mailto:ramtelabhi04@gmail.com}{ramtelabhi04@gmail.com}\ $|$\
+  \href{https://linkedin.com/in/abhi-ramtel}{linkedin.com/in/abhi-ramtel}\ $|$\
+  \href{https://github.com/abhi-ramtel}{github.com/abhi-ramtel}\ $|$\
+  \href{https://abhiramtel.com}{abhiramtel.com}
+\end{center}
+\vspace{-15pt}
+
+%---------- SUMMARY ----------
+\section{Summary}
+\vspace{-2pt}
+% \small{I am a backend-focused systems and software engineer and CS graduate (AI/ML, Cybersecurity) with hands-on experience writing high-performance low-level code in C/C++ and building production-grade backend systems, API endpoints, and production-grade fintech infrastructure in Go and Python. Multi-time hackathon winner with a track record of shipping impactful products under tight constraints. Seeking software engineering roles at the intersection of  low-level systems execution, backend development, AI/ML, and security.}
+% \small{I am a backend-focused systems and software engineer and CS graduate (AI/ML, Cybersecurity) with a proven track record of writing high-performance low-level code in C/C++ and building production-grade software. Experienced in delivering multi-threaded parallel processing engines and low-latency architectural frameworks under tight constraints. Multi-time hackathon winner seeking software engineering roles at the intersection of low-level systems execution, backend development, and AI/ML infrastructure.}
+% --DEVOPS--
+% \small{DevOps engineer with hands-on experience designing and operating scalable, fault-isolated infrastructure for high-concurrency fintech platforms. Skilled in AWS, GCP, Docker, Kubernetes and CI/CD pipelines using Go and Python, with a strong focus on security, compliance and observability. Proven ability to optimize performance and ensure robust system reliability.}
+% --AI/ML--
+\small{Software Engineer with a strong background in backend systems and AI/ML, proficient in Python, TypeScript and modern AI frameworks such as LangChain. Experienced in building scalable platforms, high-performance data pipelines and integrating LLMs into production applications. Recognized for solving complex challenges under tight constraints and delivering reliable, high-throughput systems.}
+
+\vspace{-7pt}
+
+%---------- EXPERIENCE ----------
+\section{Experience}
+\vspace{-2pt}
+\roleheading{Founding Engineer}{April 2026 -- Present}{Stealth Fintech Startup}{Chicago, IL}
+\bullist
+  \bul{Designed a payments platform (Auth, Ledger, Currency, Gateway) with fault-isolated service boundaries and horizontal scalability, enabling high-concurrency cross-border transactions at \textbf{99.9\% uptime}.}
+  \bul{Engineered a secure digital wallet engine using \textbf{PostgreSQL row-level locking} and idempotency guarantees, eliminating double-spend risk and ensuring real-time balance accuracy under peak parallel load.}
+  \bul{Hardened platform security and compliance posture by implementing PII encryption, append-only audit logging, and a webhook event system, providing full transaction traceability and satisfying KYC/AML data requirements.}
+  \bul{Implemented CI/CD pipelines using GitHub Actions to automate build, test, and deployment processes, reducing release time by 40\%.}
+\stopbulls
+\vspace{3pt}
+
+\roleheading{Teaching Assistant, CSE 365: Computer Security}{Aug 2025 -- May 2026}{University at Buffalo}{Buffalo, NY}
+\bullist
+  % \bul{Stabilized and optimized containerized Linux lab infrastructure and backend APIs supporting \textbf{150+ students}, cutting lab downtime by rapidly diagnosing and resolving recurring system-level service failures across VMs and containerized environments.}
+  \bul{Supported \textbf{90+ students} across weekly recitations and office hours for an upper-level security course, guiding hands-on SEED Labs covering buffer overflow exploitation, TCP attacks, packet sniffing/spoofing, Shellshock, and PKI.}
+\stopbulls
+\vspace{3pt}
+
+\roleheading{Tech Consultant}{Aug 2023 -- May 2026}{UB Information \& Technology Department}{Buffalo, NY}
+\bullist
+  \bul{Delivered Tier-2 technical support for \textbf{2,000+ users}, resolving complex OS, networking, and security incidents while managing enterprise imaging, configuration, and ticket-based workflows across Windows, macOS, and Linux environments.}
+\stopbulls
+\vspace{3pt}
+
+\roleheading{Software Engineer Intern}{Jan 2024 -- May 2025}{Cytocybernetics}{Buffalo, NY}
+\bullist
+  \bul{Designed and shipped a next‑generation Python data‑pipeline feature built on vectorized execution, boosting throughput \textbf{60\%} and enabling significantly more scalable data processing.}
+  \bul{Engineered a multi-threaded \textbf{C++/OpenMP} parallel processing engine for real-time analysis of over a \textbf{million} streaming electrophysiology datasets, achieving near-zero latency through optimized memory management and concurrent execution.}
+  \bul{Architected a new modular C/GTK framework with a GObject plug‑in system and dynamic hardware‑configuration modules, enabling extensible, maintainable, and reproducible scientific‑simulation workflows.}
+\stopbulls
+
+\vspace{-7pt}
+%---------- PROJECTS ----------
+\section{Projects}
+\vspace{-2pt}
+
+\projheading{\textbf{\href{https://devpost.com/software/carbonproxy}{CarbonProxy}} $|$ \emph{Python, FastAPI, SQLite, NumPy, Gemini API, GitHub Actions}}{Feb 2026}
+\bullist
+  \bul{\textbf{Winner, Best Overall Hack -- HackDuke 2026.} Architected semantic KV-caching middleware that reduced LLM session token consumption by \textbf{86\%} (2,400$\to$340 tokens) via compressed context state management.}
+  \bul{Designed REST API contracts and built an \textbf{async FastAPI backend} with LlamaIndex-powered cosine-similarity retrieval (0.75 threshold), enabling parallel development across 3 tracks for low-latency context injection}
+\stopbulls
+\vspace{3pt}
+
+\projheading{\textbf{\href{https://devpost.com/software/dots-y5r21j}{Dots}} $|$ \emph{Swift, SwiftUI, ARKit, RoomPlan, RealityKit, Gemini API, Fetch.ai}}{Apr 2026}
+\bullist
+  \bul{\textbf{1st Place, Catalyst for Care; 3rd Place, UCLA Hacks Agentverse.} Built an AR accessibility assistant that improved indoor wayfinding for visually impaired users through spatial computing, voice interaction, agentic task automation, and AI-driven real-time navigation.}
+\stopbulls
+\vspace{3pt}
+
+% \projheading{\textbf{LearnHub} $|$ \emph{React, TypeScript, Node.js, PostgreSQL, Gemini Live API \& TTS, Imagen, WebSockets, LibLouis}}{Jan 2026 - Feb 2026}
+% \bullist
+%   \bul{Built LearnHub, an \textbf{AI‑driven accessibility platform} that delivers \textbf{hands‑free, multilingual, adaptive, and Braille‑ready learning experiences} using Gemini to \textbf{remove physical, sensory, and cognitive barriers} for every student.}
+% \stopbulls
+% \vspace{3pt}
+
+% \projheading{\textbf{Socket Programming} $|$ \emph{C/C++}}{Jan 2026 - Feb 2026}
+% \bullist
+%   \bul{Developed client-server applications using raw POSIX socket APIs on Linux, implementing TCP/IP communication and gaining hands-on experience with transport and network-layer protocols, connection management, and low-level network programming.}
+% \stopbulls
+% \vspace{3pt}
+
+% \projheading{\textbf{Network Simulation with ns-3} $|$ \emph{Wireshark, NS-3}}{Jan 2026 - Feb 2026}
+% \bullist
+%   \bul{Designed and simulated multiple wired and wireless network topologies, including point-to-point, CSMA/LAN, and WiFi networks, using the ns-3 discrete-event simulator.}
+%   \bul{Captured and analyzed packet-level traffic with Wireshark, tcpdump, PCAP tracing, and NetAnim to validate protocol behavior and network performance.}
+% \stopbulls
+% \vspace{3pt}
+
+% \projheading{\textbf{Network Performance Analysis} $|$ \emph{Wireshark}}{Jan 2026 - Feb 2026}
+% \bullist
+%   \bul{Conducted quantitative studies on network throughput and packet delivery by varying node counts, packet sizes, bandwidth, latency, and error rates.}
+%   \bul{Processed simulation trace data and generated performance visualizations to evaluate system behavior under different conditions.}
+% \stopbulls
+% \vspace{3pt}
+
+% \projheading{\textbf{Custom Multi-Hop Network Design} $|$ \emph{Wireshark}}{Jan 2026 - Feb 2026}
+% \bullist
+%   \bul{Engineered and simulated a custom 4-node routed UDP network topology with concurrent traffic flows, implementing IP addressing schemes, traffic generation, packet sinks, and end-to-end performance analysis to evaluate packet delivery across multiple hops.}
+% \stopbulls
+% \vspace{3pt}
+
+% TCP Congestion Control Evaluation - Analyzed TCP congestion-control mechanisms by simulating networks with varying delay, bandwidth, packet loss, and error characteristics. Studied congestion window evolution during slow start, congestion avoidance, and fast recovery, and evaluated how network conditions affect throughput and reliability.
+
+
+% \projheading{\textbf{Computer Networking Projects} $|$ \emph{C/C++, ns-3, Wireshark, tcpdump, NetAnim, Gnuplot, Linux}}{Aug 2025 -- Dec 2025}
+% \bullist
+%   \bul{Implemented client-server network applications using \textbf{POSIX sockets} in C/C++, developing hands-on experience with TCP/IP communication, connection management, and low-level network programming on Unix/Linux systems.}
+  
+%   \bul{Modeled and analyzed \textbf{point-to-point, CSMA/LAN, and WiFi network topologies} in ns-3, capturing and inspecting packet-level traffic using Wireshark, tcpdump, PCAP tracing, and NetAnim visualizations.}
+  
+%   \bul{Conducted throughput and packet-delivery experiments across varying node counts and packet sizes, processing simulation trace data and generating performance visualizations with Gnuplot.}
+  
+%   \bul{Evaluated \textbf{TCP congestion control behavior} under varying latency, bandwidth, packet-loss, and error-rate conditions, analyzing congestion window evolution during slow start, congestion avoidance, and fast recovery phases.}
+  
+%   \bul{Designed and simulated a custom \textbf{4-node routed network topology} with dual concurrent UDP traffic flows, implementing IP addressing schemes, traffic generation, packet sinks, and end-to-end performance analysis.}
+% \stopbulls
+
+\projheading{\textbf{\href{https://github.com/l3hargav/CloudSim-Resource-Management-RL.git}{Adaptive Cloud RL Resource Manager}} $|$ \emph{Python, PyTorch, NumPy, Gymnasium, CloudSim Plus}}{Aug -- Dec 2025}
+\bullist
+  \bul{Implemented PPO, A2C, and DDQN (Reinforcement Learning Algorithms) from scratch to simulate adaptive cloud auto‑scaling in a miniature data center, incorporating both \textbf{horizontal} and \textbf{vertical} scaling mechanisms.}
+  \bul{Demonstrated a \textbf{40\% reduction in resource waste} without degrading task completion rates across diverse traffic scenarios.}
+  % {Implemented PPO, A2C, and DDQN agents from scratch to simulate adaptive cloud auto-scaling, demonstrating a \textbf{40\% reduction in resource waste} without degrading cloudlet completion rates across diverse traffic scenarios.}
+\stopbulls
+\vspace{3pt}
+
+% \projheading{\textbf{SharePlay} $|$ \emph{React, TypeScript, Python, Flask, Firebase, Spotify Web API}}{Jun -- Nov 2025}
+% \bullist
+%   \bul{Built a collaborative music platform enabling real-time group listening with Spotify OAuth integration and an adaptive recommendation engine using exploration--exploitation algorithms to personalize sessions dynamically.}
+% \stopbulls
+% \vspace{3pt}
+
+\projheading{\textbf{\href{https://devpost.com/software/resqme-jq52al}{ResQme}} $|$ \emph{TypeScript, Node.js, C/C++, ESP32, Supabase}}{Oct 2025}
+\bullist
+  \bul{\textbf{Winner, HackHarvard 2025.} Architected an \textbf{infrastructure-free ESP32 mesh network} with master election, encrypted payloads, and GPS telemetry for resilient SOS communication; built a REST admin API with real-time geolocation feeds and OTA update support.}
+\stopbulls
+% \vspace{3pt}
+
+
+\vspace{-7pt}
+
+%---------- SKILLS ----------
+\section{Technical Skills}
+\vspace{-2pt}
+\begin{itemize}[leftmargin=0pt, label={}, topsep=0pt, itemsep=1pt, parsep=0pt]
+  \small\item
+    \textbf{Languages:} Python, Go, C/C++, Java, TypeScript/JavaScript, Rust, Swift, Shell Scripting \\
+    \textbf{Backend \& APIs:} REST APIs, FastAPI, Microservices, gRPC, OAuth 2.0, JWT, Event-Driven Architecture, WebSockets, Flask, Django, Node.js \\
+    \textbf{Databases:} PostgreSQL, MySQL, SQLite, Firebase/Firestore, NoSQL -- row-level locking, query optimization, schema design \\
+    \textbf{Cloud \& Infrastructure:} AWS, GCP, Docker, Kubernetes, CI/CD (GitHub Actions, Jenkins), Distributed Systems \\
+    % , Scalable Backend Infrastructure
+    \textbf{AI \& ML:} PyTorch, TensorFlow, NumPy, Pandas, Scikit-learn, LangChain, YOLOv8, OpenCV, LLMs, Semantic Embeddings, LlamaIndex \\
+    \textbf{Tools and Methodologies:} Git, JIRA, Agile/Scrum, Claude Code, Cursor \\
+    % \textbf{AI / LLM:} OpenAI (custom GPTs, tool use via OpenAPI), Gemini API, ElevenLabs, Claude \\
+    % \textbf{Automation: } n8n, Zapier \\
+    % \textbf{Infra: } Vercel
+\end{itemize}
+\vspace{-7pt}
+
+%---------- EDUCATION ----------
+\section{Education}
+\vspace{-2pt}
+\begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+  \textbf{University at Buffalo, The State University of New York} & \textbf{May 2026} \\
+  \textit{\small B.S. Computer Science\ $|$\ Cybersecurity Minor\ $|$\ Cum Laude\ $|$\ Dean's List (2$\times$)} & \\
+\end{tabular*}
+
+\small\textbf{Coursework:} \textit{Data Structures \& Algorithms, Distributed Systems, Reinforcement Learning, Machine Learning, Operating Systems, Computer Security, Networking Concepts, Software Engineering, Database Systems}\\
+
+\textbf{Honors \& Activities:} \textit{$4\times$ Hackathon Winner (HackHarvard, UCLA Hacks, HackIllinois, HackDuke), Nepali Student Association -- Founding President, UB Lockdown NetDef -- Red Team, Theta Tau -- Professional Engineering Fraternity}
+\vspace{-7pt}
+
+
+\end{document}
