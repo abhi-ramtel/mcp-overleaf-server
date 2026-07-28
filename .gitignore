@@ -24,5 +24,9 @@ output/*
 
 # macOS
 .DS_Store
-/outputtemplates/main.tex
+
+# personal documents — your real résumé/CV stay local, never published
+templates/main.tex
 templates/main.pdf
+templates/cv.tex
+templates/cover-letter.tex
