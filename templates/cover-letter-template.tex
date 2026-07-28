@@ -1,0 +1,62 @@
+%-------------------------
+% One-page cover letter — styled to match main.tex (charter, accent rule).
+% Placeholders ({{...}}) are filled by src/core/coverLetter.ts.
+%------------------------
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{charter}
+\usepackage{microtype}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\input{glyphtounicode}
+\pdfgentounicode=1
+
+\geometry{letterpaper, top=0.6in, bottom=0.6in, left=0.75in, right=0.75in}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\definecolor{accent}{HTML}{C0392B}
+\definecolor{darkgray}{HTML}{222222}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{7pt}
+\raggedright
+
+\begin{document}
+
+%---------- HEADING (mirrors the résumé) ----------
+% \parskip is 7pt for body paragraphs; zero it inside the header so the name,
+% contact line, and rule stay tight even when the contact line wraps.
+\begingroup
+\setlength{\parskip}{0pt}
+\begin{center}
+  {\LARGE\bfseries\color{accent} {{NAME}}}\\[3pt]
+  \footnotesize {{CONTACT_LINE}}
+\end{center}
+\endgroup
+\vspace{4pt}
+{\color{darkgray}\hrule}
+\vspace{2pt}
+
+\small
+
+{{DATE}}
+
+{{RECIPIENT_BLOCK}}
+
+{{GREETING}}
+
+{{BODY}}
+
+\vspace{4pt}
+{{CLOSING}}\\[10pt]
+\textbf{ {{NAME}} }
+
+\end{document}
