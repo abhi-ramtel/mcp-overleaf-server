@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { config } from "./config.js";
-import { loadMasterCv, runRenderPipeline, latexToText } from "./core/pipeline.js";
+import { loadMasterCv, runRenderPipeline, renderApplicationSet, latexToText } from "./core/pipeline.js";
 import { buildTailoringBrief, masterCvForBrief } from "./core/brief.js";
 import { TailoredContentSchema, CoverLetterContentSchema } from "./core/schema.js";
 import { runCoverLetterPipeline } from "./core/coverLetter.js";
@@ -122,9 +122,13 @@ export function registerTools(server: McpServer): void {
         position: z.string().optional(),
         jobUrl: z.string().optional(),
         template: z.enum(["resume", "cv"]).optional().describe("Which document to produce (default resume)"),
+        questions: z
+          .array(z.string())
+          .optional()
+          .describe("Application-portal questions to answer in chat (e.g. 'Why this company?')"),
       },
     },
-    async ({ jobDescription, company, position, jobUrl, template }) =>
+    async ({ jobDescription, company, position, jobUrl, template, questions }) =>
       guard(async () => {
         const cv = await loadMasterCv();
         const masterCvText = await readFile(config.cvMasterPath, "utf-8");
@@ -135,6 +139,7 @@ export function registerTools(server: McpServer): void {
           position,
           jobUrl,
           template,
+          questions,
         });
         return ok(brief);
       }),
@@ -146,13 +151,17 @@ export function registerTools(server: McpServer): void {
     {
       title: "Render & compile tailored document",
       description:
-        "Inject TailoredContent into the LaTeX template, verify every bullet traces to the master CV " +
-        "(anti-fabrication), compile to PDF, and save as <Company>_<Position>.pdf in the output dir. " +
-        "ALWAYS pass `coverLetter` too unless the user opted out — it produces the matching one-page " +
-        "letter in the same call. The application is auto-logged to the tracker. " +
+        "Produce a COMPLETE application in one call: résumé + CV + cover letter, all compiled to PDF and " +
+        "logged to the tracker as a single row. Every bullet is verified against the master CV " +
+        "(anti-fabrication) before anything compiles. Always pass `coverLetter` unless the user opted out. " +
+        "The CV is generated automatically — pass `cvContent` for a fuller CV, or `alsoCv:false` to skip it. " +
         "Returns provenance warnings and, if jobDescription is given, an ATS coverage report.",
       inputSchema: {
         content: TailoredContentSchema.describe("The tailored content JSON produced from the brief"),
+        cvContent: TailoredContentSchema.optional().describe(
+          "Optional fuller content for the CV (more roles/projects). Defaults to the résumé content.",
+        ),
+        alsoCv: z.boolean().optional().describe("Generate the CV too (default true)"),
         coverLetter: CoverLetterContentSchema.optional().describe(
           "Cover letter content — pass this to generate the résumé and letter together (recommended)",
         ),
@@ -179,59 +188,83 @@ export function registerTools(server: McpServer): void {
         if (args.project?.trim()) {
           repoDir = join(config.reposDir, parseProject(args.project).projectId);
         }
-        const r = await runRenderPipeline({
+
+        // Single-document path: an explicit template/templateFile/outputName, or
+        // no company+position to name a full application set.
+        const wantsSet =
+          Boolean(args.company?.trim() && args.position?.trim()) &&
+          !args.templateFile &&
+          !args.outputName &&
+          args.template !== "cv" &&
+          args.compile !== false;
+
+        if (!wantsSet) {
+          const r = await runRenderPipeline({
+            content: args.content,
+            template: args.template,
+            templateFile: args.templateFile,
+            repoDir,
+            company: args.company,
+            position: args.position,
+            outputName: args.outputName,
+            headerLine: args.headerLine,
+            jobDescription: args.jobDescription,
+            jobUrl: args.jobUrl,
+            jdSummary: args.jdSummary,
+            autoTrack: args.autoTrack,
+            compile: args.compile,
+          });
+          if (!r.ok) return fail(r.error ?? "Render pipeline failed.");
+          const single = [`✅ Generated ${r.outputBase} from template "${r.templateSource}".`];
+          if (r.pdfPath) single.push(`PDF: ${r.pdfPath}${r.pageCount ? ` (${r.pageCount} page${r.pageCount === 1 ? "" : "s"})` : ""}`);
+          single.push(`TeX: ${r.texPath}`);
+          if (r.provenance.warnings.length) {
+            single.push("", "Provenance warnings:", ...r.provenance.warnings.map((w) => `  • ${w}`));
+          }
+          if (r.tracked) single.push(`📋 ${r.tracked.created ? "Logged" : "Updated"} in the tracker.`);
+          return ok(single.join("\n"));
+        }
+
+        // Full application set: résumé + CV + cover letter, one tracker row.
+        const set = await renderApplicationSet({
           content: args.content,
-          template: args.template,
-          templateFile: args.templateFile,
-          repoDir,
-          company: args.company,
-          position: args.position,
-          outputName: args.outputName,
-          headerLine: args.headerLine,
-          jobDescription: args.jobDescription,
+          cvContent: args.cvContent,
+          alsoCv: args.alsoCv,
+          coverLetter: args.coverLetter,
+          company: args.company!.trim(),
+          position: args.position!.trim(),
           jobUrl: args.jobUrl,
+          jobDescription: args.jobDescription,
           jdSummary: args.jdSummary,
-          autoTrack: args.autoTrack,
-          compile: args.compile,
+          headerLine: args.headerLine,
         });
 
+        const r = set.resume;
         if (!r.ok) return fail(r.error ?? "Render pipeline failed.");
 
-        const lines: string[] = [`✅ Generated ${r.outputBase} from template "${r.templateSource}".`];
-        if (r.pdfPath) lines.push(`PDF: ${r.pdfPath}${r.pageCount ? ` (${r.pageCount} page${r.pageCount === 1 ? "" : "s"}, ${r.sizeKB} KB)` : ""}`);
-        lines.push(`TeX: ${r.texPath}`);
-        if (r.pageCount && r.pageCount > 1) {
-          lines.push(`⚠️  ${r.pageCount} pages — trim bullets/entries to fit one page.`);
+        const lines: string[] = [`✅ Résumé: ${r.pdfPath}${r.pageCount ? ` (${r.pageCount} page${r.pageCount === 1 ? "" : "s"})` : ""}`];
+        if (r.pageCount && r.pageCount > 1) lines.push(`⚠️  Résumé is ${r.pageCount} pages — trim to fit one page.`);
+
+        if (set.cv?.ok) {
+          lines.push(`✅ CV: ${set.cv.pdfPath}${set.cv.pageCount ? ` (${set.cv.pageCount} page${set.cv.pageCount === 1 ? "" : "s"})` : ""}`);
+        } else if (set.cv) {
+          lines.push(`⚠️  CV failed: ${set.cv.error}`);
         }
+
+        if (set.coverLetter?.ok) {
+          lines.push(`✅ Cover letter: ${set.coverLetter.pdfPath}${set.coverLetter.pageCount ? ` (${set.coverLetter.pageCount} page${set.coverLetter.pageCount === 1 ? "" : "s"})` : ""}`);
+          for (const w of set.coverLetter.warnings as string[]) lines.push(`   ⚠️  ${w}`);
+        } else if (set.coverLetter) {
+          lines.push(`⚠️  Cover letter failed: ${set.coverLetter.error}`);
+        } else {
+          lines.push("ℹ️  No cover letter — pass `coverLetter` to produce it in the same call.");
+        }
+
         if (r.provenance.warnings.length) {
           lines.push("", "Provenance warnings (review before sending):", ...r.provenance.warnings.map((w) => `  • ${w}`));
         }
-        if (r.validation?.warnings.length) {
-          lines.push("", "LaTeX warnings:", ...r.validation.warnings.map((w) => `  • ${w}`));
-        }
-        // Cover letter in the same call, so the pair is always produced together.
-        if (args.coverLetter) {
-          const cl = await runCoverLetterPipeline({
-            content: {
-              ...args.coverLetter,
-              company: args.coverLetter.company || args.company || "",
-              position: args.coverLetter.position || args.position || "",
-            },
-          });
-          if (cl.ok) {
-            lines.push(
-              `✅ Cover letter: ${cl.pdfPath}${cl.pageCount ? ` (${cl.pageCount} page${cl.pageCount === 1 ? "" : "s"})` : ""}`,
-            );
-            if ((cl.pageCount ?? 1) > 1) lines.push("⚠️  Cover letter exceeds one page — shorten the paragraphs.");
-            for (const w of cl.claims.warnings) lines.push(`   ⚠️  ${w}`);
-          } else {
-            lines.push(`⚠️  Cover letter failed: ${cl.error}`);
-          }
-        } else {
-          lines.push("ℹ️  No cover letter generated — pass `coverLetter` to produce it in the same call.");
-        }
-        if (r.tracked) {
-          lines.push(`📋 ${r.tracked.created ? "Logged" : "Updated"} in the tracker (${r.tracked.total} total).`);
+        if (set.tracked) {
+          lines.push(`📋 ${set.tracked.created ? "Logged" : "Updated"} in the tracker (${set.tracked.total} total).`);
         }
         if (r.ats) {
           lines.push(
@@ -307,11 +340,15 @@ export function registerTools(server: McpServer): void {
               jobDescription: z.string(),
               jobUrl: z.string().optional(),
               template: z.enum(["resume", "cv"]).optional(),
+              questions: z
+                .array(z.string())
+                .optional()
+                .describe("Portal questions for this job, answered in chat (e.g. 'Why this company?')"),
             }),
           )
           .min(1)
           .max(MAX_BATCH_JOBS),
-        threshold: z.number().optional().describe("Similarity 0-1 above which jobs share content (default 0.65)"),
+        threshold: z.number().optional().describe("Similarity 0-1 above which jobs share content (default 0.6)"),
         useCache: z.boolean().optional().describe("Reuse content cached from previous sessions (default true)"),
       },
     },
@@ -329,9 +366,9 @@ export function registerTools(server: McpServer): void {
       title: "Render, compile & log a whole batch",
       description:
         "Render, compile, auto-log, and cache every job in one call — no per-job round trip. " +
-        "Supply `content` only for jobs batch_plan marked GENERATE; for the rest pass `reuseFrom` " +
-        "(the batch index or cache key from the plan) and the server resolves the content itself. " +
-        "Every job is automatically written to the application tracker.",
+        "Each job produces a résumé AND a CV (plus a cover letter when `coverLetter` is given), logged " +
+        "as one tracker row. Supply `content` only for jobs batch_plan marked GENERATE; for the rest pass " +
+        "`reuseFrom` (the batch index or cache key from the plan) and the server resolves the content itself.",
       inputSchema: {
         jobs: z
           .array(
@@ -349,6 +386,8 @@ export function registerTools(server: McpServer): void {
               summary: z.string().optional().describe("Role-specific summary override when reusing content"),
               headerLine: z.string().optional(),
               coverLetter: CoverLetterContentSchema.optional().describe("Produced alongside the résumé for this job"),
+              cvContent: TailoredContentSchema.optional().describe("Optional fuller CV content; defaults to the résumé content"),
+              alsoCv: z.boolean().optional().describe("Generate the CV too (default true)"),
             }),
           )
           .min(1)
@@ -372,8 +411,9 @@ export function registerTools(server: McpServer): void {
                 `${j.source === "reused" ? " · reused" : ""}` +
                 `${j.tracked ? " · logged" : ""}`,
             );
-            if (j.pdfPath) lines.push(`       ${j.pdfPath}`);
-            if (j.coverLetterPath) lines.push(`       ${j.coverLetterPath}`);
+            if (j.pdfPath) lines.push(`       résumé: ${j.pdfPath}`);
+            if (j.cvPath) lines.push(`       CV:     ${j.cvPath}`);
+            if (j.coverLetterPath) lines.push(`       letter: ${j.coverLetterPath}`);
             for (const w of j.warnings) lines.push(`       ⚠️  ${w}`);
           } else {
             lines.push(`  ❌ #${j.index} ${j.company} — ${j.position}: ${j.error}`);

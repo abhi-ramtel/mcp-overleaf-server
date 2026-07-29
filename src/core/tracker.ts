@@ -16,24 +16,35 @@ export interface TrackerRow {
   jobLink?: string;
   atsScore?: number | string; // percent
   resumeFile?: string;
+  cvFile?: string;
+  coverLetterFile?: string;
   gitLink?: string;
   jdSummary?: string;
   status?: string; // e.g. generated | applied | interview | offer | rejected
   notes?: string;
 }
 
-const HEADER = [
-  "Date Applied",
-  "Company",
-  "Position",
-  "Job Link",
-  "ATS %",
-  "Resume File",
-  "Git Link",
-  "JD Summary",
-  "Status",
-  "Notes",
-] as const;
+/**
+ * Column order of newly written sheets. Reading is done by header NAME (see
+ * {@link listApplications}), so columns can be added or reordered here without
+ * corrupting sheets written by an earlier version.
+ */
+const COLUMNS: { header: string; field: keyof TrackerRow }[] = [
+  { header: "Date Applied", field: "dateApplied" },
+  { header: "Company", field: "company" },
+  { header: "Position", field: "position" },
+  { header: "Job Link", field: "jobLink" },
+  { header: "ATS %", field: "atsScore" },
+  { header: "Resume File", field: "resumeFile" },
+  { header: "CV File", field: "cvFile" },
+  { header: "Cover Letter", field: "coverLetterFile" },
+  { header: "Git Link", field: "gitLink" },
+  { header: "JD Summary", field: "jdSummary" },
+  { header: "Status", field: "status" },
+  { header: "Notes", field: "notes" },
+];
+
+const HEADER = COLUMNS.map((c) => c.header);
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -87,41 +98,38 @@ export function parseCsv(text: string): string[][] {
 }
 
 function rowToFields(r: TrackerRow): string[] {
-  const ats = r.atsScore === undefined || r.atsScore === "" ? "" : String(r.atsScore);
-  return [
-    r.dateApplied?.trim() || today(),
-    r.company ?? "",
-    r.position ?? "",
-    r.jobLink ?? "",
-    ats,
-    r.resumeFile ?? "",
-    r.gitLink ?? "",
-    r.jdSummary ?? "",
-    r.status ?? "generated",
-    r.notes ?? "",
-  ];
+  return COLUMNS.map(({ field }) => {
+    if (field === "dateApplied") return r.dateApplied?.trim() || today();
+    if (field === "status") return r.status ?? "generated";
+    const v = r[field];
+    return v === undefined || v === null ? "" : String(v);
+  });
 }
 
-function fieldsToRow(f: string[]): TrackerRow {
-  return {
-    dateApplied: f[0] ?? "",
-    company: f[1] ?? "",
-    position: f[2] ?? "",
-    jobLink: f[3] ?? "",
-    atsScore: f[4] ?? "",
-    resumeFile: f[5] ?? "",
-    gitLink: f[6] ?? "",
-    jdSummary: f[7] ?? "",
-    status: f[8] ?? "",
-    notes: f[9] ?? "",
-  };
-}
-
-/** Read all rows from the tracker (empty array if the file doesn't exist). */
+/**
+ * Read all rows, mapping columns by their header name so sheets written by an
+ * older version (with fewer columns) still load correctly.
+ */
 export async function listApplications(trackerPath: string): Promise<TrackerRow[]> {
   if (!existsSync(trackerPath)) return [];
   const rows = parseCsv(await readFile(trackerPath, "utf-8"));
-  return rows.slice(1).filter((r) => r.some((c) => c.trim() !== "")).map(fieldsToRow);
+  if (rows.length === 0) return [];
+
+  const headerRow = (rows[0] ?? []).map((h) => h.trim().toLowerCase());
+  // header name → field, for every column this version knows about
+  const byHeader = new Map(COLUMNS.map((c) => [c.header.toLowerCase(), c.field]));
+  const indexToField = headerRow.map((h) => byHeader.get(h));
+
+  return rows
+    .slice(1)
+    .filter((r) => r.some((c) => c.trim() !== ""))
+    .map((fields) => {
+      const row: Record<string, string> = { company: "", position: "" };
+      indexToField.forEach((field, i) => {
+        if (field) row[field] = fields[i] ?? "";
+      });
+      return row as unknown as TrackerRow;
+    });
 }
 
 function key(company: string, position: string): string {

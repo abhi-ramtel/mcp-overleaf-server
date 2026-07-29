@@ -22,13 +22,21 @@ export function registerPrompts(server: McpServer): void {
         company: z.string().optional(),
         position: z.string().optional(),
         jobUrl: z.string().optional(),
+        questions: z
+          .string()
+          .optional()
+          .describe("Application-portal questions, one per line — answered in chat, not in any document"),
         template: z.string().optional().describe('"resume" (default) or "cv"'),
         project: z.string().optional().describe("Overleaf project URL/id (optional; else uses .env / bundled templates)"),
         push: z.string().optional().describe('"true" to push the tailored .tex back to an Overleaf branch'),
         coverLetter: z.string().optional().describe('"false" to skip the cover letter (default: generate one)'),
       },
     },
-    ({ jobDescription, company, position, jobUrl, template, project, push, coverLetter }) => {
+    ({ jobDescription, company, position, jobUrl, questions, template, project, push, coverLetter }) => {
+      const questionList = (questions ?? "")
+        .split("\n")
+        .map((q) => q.trim())
+        .filter(Boolean);
       const tpl = template === "cv" ? "cv" : "resume";
       const wantPush = /^(true|yes|1)$/i.test(push ?? "");
       const wantLetter = !/^(false|no|0)$/i.test(coverLetter ?? "");
@@ -43,7 +51,9 @@ export function registerPrompts(server: McpServer): void {
         steps.push(`${n++}. (No Overleaf project — use the local templates, i.e. templates/main.tex.)`);
       }
       steps.push(
-        `${n++}. Call \`prepare_tailoring\` with the job description below${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, template="${tpl}".`,
+        `${n++}. Call \`prepare_tailoring\` with the job description below${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, template="${tpl}"` +
+          (questionList.length ? `, and questions=${JSON.stringify(questionList)}` : "") +
+          ".",
         `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite/shorten ` +
           "existing bullets to fit the job, keep it to one page, weave in truthful JD keywords, and cite the " +
           "sourceId for every bullet and entry. Do NOT invent anything or add numbers not in the source.",
@@ -54,9 +64,18 @@ export function registerPrompts(server: McpServer): void {
               "brief close — drawn only from my master CV, no invented employers, projects, or figures. This " +
               "produces the résumé and the matching letter together."
             : ""),
-        `${n++}. The application is logged to the tracker automatically — no separate update_tracker call is needed. ` +
-          "If the result reports provenance warnings, more than one page, or a cover-letter warning, revise and call it again.",
+        `${n++}. That single call produces the résumé, the CV, and the cover letter, and logs the application ` +
+          "to the tracker automatically — no separate update_tracker call is needed. If the result reports " +
+          "provenance warnings, more than one page, or a cover-letter warning, revise and call it again.",
       );
+      if (questionList.length) {
+        steps.push(
+          `${n++}. Finally, answer the application questions IN CHAT (they do not go in any document). ` +
+            "First person, 3-6 sentences each, grounded only in my master CV, referencing this company and " +
+            "role concretely. If a question can't be answered truthfully from my CV, say so and tell me what " +
+            "you'd need from me.",
+        );
+      }
       if (wantPush) {
         steps.push(
           `${n++}. Call \`overleaf_commit_push\` with project, a message, branch="tailored/${(company || "role").toLowerCase().replace(/[^a-z0-9]+/g, "-")}", and push=true, then put the returned review URL in the tracker's Git Link.`,
@@ -71,6 +90,10 @@ export function registerPrompts(server: McpServer): void {
         "",
         "Reminder: truthfulness beats keyword matching. Only reorder/rewrite/shorten/merge/remove/emphasize " +
           "content that already exists in my master CV.",
+        "",
+        ...(questionList.length
+          ? ["", "--- APPLICATION QUESTIONS ---", ...questionList.map((q, i) => `${i + 1}. ${q}`)]
+          : []),
         "",
         "--- JOB DESCRIPTION ---",
         jobDescription.trim(),
@@ -94,8 +117,9 @@ export function registerPrompts(server: McpServer): void {
         jobs: z
           .string()
           .describe(
-            'The jobs. Either JSON [{"company","position","jobDescription","jobUrl"}] or blocks separated ' +
-              'by a line of "---", each starting with "Company: X" / "Position: Y" then the description.',
+            'The jobs. Either JSON [{"company","position","jobDescription","jobUrl","questions"}] or blocks ' +
+              'separated by a line of "---", each with "Company:", "Position:", optional "Question:" lines, ' +
+              "then the job description.",
           ),
         template: z.string().optional().describe('"resume" (default) or "cv"'),
         coverLetter: z.string().optional().describe('"false" to skip cover letters (default: one per job)'),
@@ -109,8 +133,10 @@ export function registerPrompts(server: McpServer): void {
         `Tailor my ${tpl} for each of the jobs below (max 10). Be economical: do NOT write content for every ` +
           "job independently — follow this exactly:",
         "",
-        `1. Parse the jobs into a list of { company, position, jobDescription, jobUrl }. Cap at 10; if more are ` +
-          "given, use the first 10 and say so.",
+        `1. Parse the jobs into a list of { company, position, jobDescription, jobUrl, questions }. Blocks are ` +
+          'separated by "---"; lines beginning "Company:", "Position:", "Job URL:" and "Question:" are fields ' +
+          "(collect every Question line into the `questions` array), and the remaining text is the job " +
+          "description. Cap at 10; if more are given, use the first 10 and say so.",
         `2. Call \`batch_plan\` with that list and template="${tpl}". It deterministically clusters similar roles ` +
           "and checks the cache, then returns the exact indices that need fresh content.",
         "3. Write TailoredContent JSON ONLY for the indices it marks GENERATE. Do not write content for the " +
@@ -125,6 +151,9 @@ export function registerPrompts(server: McpServer): void {
             : ""),
         "5. Report a short table: company, position, pages, ATS %, and whether it was generated or reused. " +
           "Only revise jobs that came back with warnings or more than one page.",
+        "6. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
+          "heading. First person, 3-6 sentences each, grounded only in my master CV and referencing that " +
+          "company and role concretely. These do not go in any document.",
         "",
         "Reminder: truthfulness beats keyword matching. Only reorder/rewrite/shorten/merge/remove/emphasize " +
           "content that already exists in my master CV.",

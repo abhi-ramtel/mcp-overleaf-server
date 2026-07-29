@@ -129,6 +129,8 @@ export interface BatchJobInput {
   jobDescription: string;
   jobUrl?: string;
   template?: "resume" | "cv";
+  /** Application-portal questions for this job, answered in chat. */
+  questions?: string[];
 }
 
 export type PlanAction = "generate" | "reuse-cache" | "reuse-batch";
@@ -140,6 +142,7 @@ export interface PlannedJob {
   jobUrl?: string;
   template: string;
   keywords: string[];
+  questions?: string[];
   action: PlanAction;
   /** Batch index (reuse-batch) or cache key (reuse-cache) supplying the content. */
   reuseFrom?: number | string;
@@ -204,6 +207,7 @@ export async function planBatch(
         jobUrl: job.jobUrl,
         template,
         keywords,
+        questions: job.questions,
         action: "reuse-batch",
         reuseFrom: source.index,
         similarity: Number(best.sim.toFixed(2)),
@@ -227,6 +231,7 @@ export async function planBatch(
         jobUrl: job.jobUrl,
         template,
         keywords,
+        questions: job.questions,
         action: "reuse-cache",
         reuseFrom: cacheHit.entry.key,
         similarity: Number(cacheHit.sim.toFixed(2)),
@@ -243,6 +248,7 @@ export async function planBatch(
       jobUrl: job.jobUrl,
       template,
       keywords,
+      questions: job.questions,
       action: "generate",
       clusterId: nextCluster++,
     });
@@ -282,6 +288,10 @@ export interface BatchRenderItem {
   headerLine?: string;
   /** Cover letter content — produced alongside the résumé in the same pass. */
   coverLetter?: unknown;
+  /** Optional fuller CV content; defaults to the résumé content. */
+  cvContent?: unknown;
+  /** Generate the CV too (default true). */
+  alsoCv?: boolean;
 }
 
 export interface BatchJobResult {
@@ -296,6 +306,7 @@ export interface BatchJobResult {
   warnings: string[];
   tracked: boolean;
   coverLetterPath?: string;
+  cvPath?: string;
   error?: string;
 }
 
@@ -318,7 +329,7 @@ export async function runBatch(items: BatchRenderItem[]): Promise<BatchRunResult
     throw new Error(`Too many jobs: ${items.length}. The maximum per batch is ${MAX_BATCH_JOBS}.`);
   }
   // Lazy import avoids a cycle at module-init time.
-  const { runRenderPipeline, outputBaseName } = await import("./pipeline.js");
+  const { renderApplicationSet } = await import("./pipeline.js");
 
   const results: BatchJobResult[] = [];
   const resolved = new Map<number, TailoredContent>();
@@ -353,44 +364,35 @@ export async function runBatch(items: BatchRenderItem[]): Promise<BatchRunResult
       if (item.summary?.trim()) content = { ...content, summary: item.summary.trim() };
 
       const template = item.template ?? "resume";
-      const r = await runRenderPipeline({
+      // A full application set: résumé + CV + cover letter, logged as one row.
+      const set = await renderApplicationSet({
         content,
-        template,
+        cvContent: item.cvContent,
+        alsoCv: item.alsoCv,
+        coverLetter: item.coverLetter,
         company: item.company,
         position: item.position,
-        outputName: outputBaseName(item.company, item.position),
-        headerLine: item.headerLine,
-        jobDescription: item.jobDescription,
         jobUrl: item.jobUrl,
-        compile: true,
+        jobDescription: item.jobDescription,
+        headerLine: item.headerLine,
       });
+      const r = set.resume;
 
       base.ok = r.ok;
       base.pdfPath = r.pdfPath;
       base.pageCount = r.pageCount;
       base.atsPercent = r.ats?.percent;
-      base.tracked = Boolean(r.tracked);
+      base.tracked = Boolean(set.tracked);
+      base.cvPath = set.cv?.pdfPath;
+      base.coverLetterPath = set.coverLetter?.pdfPath;
       base.warnings = [
         ...r.provenance.warnings,
         ...(r.pageCount && r.pageCount > 1 ? [`${r.pageCount} pages — trim to fit one page.`] : []),
+        ...(set.cv && !set.cv.ok ? [`CV failed: ${set.cv.error}`] : []),
+        ...(set.coverLetter?.warnings ?? []),
+        ...(set.coverLetter && !set.coverLetter.ok ? [`cover letter failed: ${set.coverLetter.error}`] : []),
       ];
       if (!r.ok) base.error = r.error;
-
-      // Cover letter alongside the résumé, in the same pass.
-      if (r.ok && item.coverLetter) {
-        const { runCoverLetterPipeline } = await import("./coverLetter.js");
-        const raw = item.coverLetter as Record<string, unknown>;
-        const cl = await runCoverLetterPipeline({
-          content: { ...raw, company: raw["company"] || item.company, position: raw["position"] || item.position },
-        });
-        if (cl.ok) {
-          base.coverLetterPath = cl.pdfPath;
-          if ((cl.pageCount ?? 1) > 1) base.warnings.push(`cover letter is ${cl.pageCount} pages — shorten it.`);
-          base.warnings.push(...cl.claims.warnings);
-        } else {
-          base.warnings.push(`cover letter failed: ${cl.error}`);
-        }
-      }
 
       if (r.ok) {
         resolved.set(index, content);
@@ -437,11 +439,26 @@ export function formatPlan(plan: BatchPlan): string {
     lines.push(`  #${j.index}  ${j.company} — ${j.position}  [${j.template}]  →  ${tag}`);
   }
   if (plan.warnings.length) lines.push("", "Warnings:", ...plan.warnings.map((w) => `  • ${w}`));
+
+  const withQuestions = plan.jobs.filter((j) => (j.questions?.length ?? 0) > 0);
+  if (withQuestions.length > 0) {
+    lines.push("", "Application questions to answer IN CHAT (they do not go in any document):");
+    for (const j of withQuestions) {
+      lines.push(`  ${j.company} — ${j.position}:`);
+      for (const q of j.questions ?? []) lines.push(`    • ${q}`);
+    }
+    lines.push(
+      "  Answer each in first person, 3-6 sentences, grounded only in the master CV, referencing the",
+      "  company and role concretely. Group the answers by company in your reply.",
+    );
+  }
+
   lines.push(
     "",
     `Write TailoredContent JSON ONLY for indices: [${plan.needsGeneration.join(", ") || "none"}].`,
     "Then call `batch_render` once with every job — supply `content` for generated ones and leave",
-    "it out for reuse ones (the server pulls their content automatically).",
+    "it out for reuse ones (the server pulls their content automatically). Each job produces a résumé,",
+    "a CV, and (when you pass `coverLetter`) a cover letter, all logged to the tracker automatically.",
   );
   return lines.join("\n");
 }

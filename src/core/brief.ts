@@ -16,6 +16,8 @@ export interface BriefOptions {
   position?: string;
   jobUrl?: string;
   template?: "resume" | "cv";
+  /** Application-portal questions to answer in chat (not in any document). */
+  questions?: string[];
 }
 
 /** Compact, id-annotated view of the master CV the host must draw from. */
@@ -153,7 +155,29 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
     ].join("\n"),
     ["## Master CV (draw only from this; cite these ids)", "", "```json", JSON.stringify(masterCvForBrief(cv), null, 2), "```"].join("\n"),
     SCHEMA_DOC,
-    ["## Next step", "", nextStep].join("\n"),
   );
+
+  if (opts.questions && opts.questions.length > 0) {
+    sections.push(
+      [
+        "## Application questions (answer in chat — these do NOT go in any document)",
+        "",
+        "The portal asks the following. Draft an answer for each, then show them in your reply so they can be",
+        "pasted into the application. Rules:",
+        "",
+        "- First person, 3-6 sentences, specific and plain — no corporate filler.",
+        "- Ground every claim in the master CV above. Do not invent employers, projects, or figures.",
+        "- Reference this company and role concretely, using details from the job description.",
+        "- If a question asks about preferences, working style, or motivation, answer honestly from what the CV",
+        "  actually evidences (what was built, owned, shipped) rather than inventing traits.",
+        "- If a question cannot be answered truthfully from the CV, say so plainly and suggest what the user",
+        "  would need to supply.",
+        "",
+        ...opts.questions.map((q, i) => `${i + 1}. ${q.trim()}`),
+      ].join("\n"),
+    );
+  }
+
+  sections.push(["## Next step", "", nextStep].join("\n"));
   return sections.join("\n\n");
 }

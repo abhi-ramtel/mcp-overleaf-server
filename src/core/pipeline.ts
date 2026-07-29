@@ -105,6 +105,9 @@ export interface RenderInput {
   jdSummary?: string;
   /** Auto-log to the application tracker (default true when company+position are known). */
   autoTrack?: boolean;
+  /** Filenames recorded alongside the résumé in the tracker row. */
+  cvFile?: string;
+  coverLetterFile?: string;
 }
 
 export interface RenderOutput {
@@ -233,6 +236,8 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
         jobLink: input.jobUrl ?? "",
         atsScore: out.ats?.percent ?? "",
         resumeFile: out.pdfPath ? basename(out.pdfPath) : `${base}.tex`,
+        cvFile: input.cvFile ?? "",
+        coverLetterFile: input.coverLetterFile ?? "",
         jdSummary: input.jdSummary ?? summarizeJd(input.jobDescription),
         status: "generated",
       });
@@ -242,6 +247,108 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
   }
 
   return out;
+}
+
+export interface ApplicationSetInput {
+  content: unknown;
+  /** Optional fuller CV content. Defaults to the résumé content. */
+  cvContent?: unknown;
+  /** Cover letter content — omit to skip the letter. */
+  coverLetter?: unknown;
+  company: string;
+  position: string;
+  jobUrl?: string;
+  jobDescription?: string;
+  jdSummary?: string;
+  headerLine?: string;
+  templateFile?: string;
+  /** Produce the CV as well as the résumé (default true). */
+  alsoCv?: boolean;
+}
+
+export interface ApplicationSetResult {
+  resume: RenderOutput;
+  cv?: RenderOutput;
+  coverLetter?: { ok: boolean; pdfPath?: string; pageCount?: number; warnings: string[]; error?: string };
+  tracked?: { created: boolean; total: number };
+}
+
+/**
+ * Render a complete application: résumé, CV, and cover letter, then write a
+ * single tracker row naming all three. Tracking happens once at the end so the
+ * row is complete rather than being written before the other documents exist.
+ */
+export async function renderApplicationSet(input: ApplicationSetInput): Promise<ApplicationSetResult> {
+  const baseName = outputBaseName(input.company, input.position);
+
+  // 1. Résumé — tracking deferred until every document is known.
+  const resume = await runRenderPipeline({
+    content: input.content,
+    template: "resume",
+    templateFile: input.templateFile,
+    company: input.company,
+    position: input.position,
+    outputName: baseName,
+    headerLine: input.headerLine,
+    jobDescription: input.jobDescription,
+    jobUrl: input.jobUrl,
+    autoTrack: false,
+  });
+
+  const result: ApplicationSetResult = { resume };
+  if (!resume.ok) return result;
+
+  // 2. CV (same content unless a fuller cvContent was supplied).
+  if (input.alsoCv !== false) {
+    result.cv = await runRenderPipeline({
+      content: input.cvContent ?? input.content,
+      template: "cv",
+      company: input.company,
+      position: input.position,
+      outputName: `${baseName}_CV`,
+      headerLine: input.headerLine,
+      jobDescription: input.jobDescription,
+      autoTrack: false,
+    });
+  }
+
+  // 3. Cover letter.
+  if (input.coverLetter) {
+    const { runCoverLetterPipeline } = await import("./coverLetter.js");
+    const raw = input.coverLetter as Record<string, unknown>;
+    const cl = await runCoverLetterPipeline({
+      content: { ...raw, company: raw["company"] || input.company, position: raw["position"] || input.position },
+    });
+    result.coverLetter = {
+      ok: cl.ok,
+      pdfPath: cl.pdfPath,
+      pageCount: cl.pageCount,
+      warnings: [
+        ...cl.claims.warnings,
+        ...((cl.pageCount ?? 1) > 1 ? [`cover letter is ${cl.pageCount} pages — shorten it.`] : []),
+      ],
+      error: cl.error,
+    };
+  }
+
+  // 4. One tracker row naming everything that was produced.
+  try {
+    result.tracked = await recordApplication(config.trackerPath, {
+      company: input.company,
+      position: input.position,
+      jobLink: input.jobUrl ?? "",
+      atsScore: resume.ats?.percent ?? "",
+      resumeFile: resume.pdfPath ? basename(resume.pdfPath) : "",
+      cvFile: result.cv?.pdfPath ? basename(result.cv.pdfPath) : "",
+      coverLetterFile: result.coverLetter?.pdfPath ? basename(result.coverLetter.pdfPath) : "",
+      jdSummary: input.jdSummary ?? summarizeJd(input.jobDescription),
+      status: "generated",
+    });
+  } catch {
+    // Tracking must never fail the documents themselves.
+  }
+
+  return result;
 }
 
 /** First ~200 chars of the JD, whitespace-collapsed — a usable tracker summary. */
