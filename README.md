@@ -50,7 +50,11 @@ LATEX_ENGINE=latexmk
 
 ## Connect to an MCP client
 
-**Claude Desktop** — add to `claude_desktop_config.json`:
+All clients below launch the same process — `node /ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js` — they just each want that command in their own config file/format. The server reads `.env` from its own directory, so secrets never need to go in any client config. **Always use the absolute path** (not `~` or a relative path) and **fully restart the client** after editing — MCP tool lists are only fetched at connection time.
+
+### Claude Desktop / Cursor / VS Code / Windsurf
+
+Add to `claude_desktop_config.json` (or the equivalent MCP settings in Cursor/VS Code/Windsurf — same shape):
 
 ```json
 {
@@ -63,7 +67,51 @@ LATEX_ENGINE=latexmk
 }
 ```
 
-The server reads `.env` from its own directory, so secrets don't go in the config. Restart the client fully after editing. **Cursor / VS Code / Windsurf** use the same shape.
+See [examples/claude_desktop_config.json](examples/claude_desktop_config.json).
+
+### Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.overleaf-resume]
+command = "node"
+args = ["/ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js"]
+```
+
+Or skip the file entirely:
+
+```bash
+codex mcp add overleaf-resume -- node /ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js
+```
+
+Verify with `codex mcp list`. See [examples/codex_config.toml](examples/codex_config.toml).
+
+### Gemini CLI
+
+Add to `~/.gemini/settings.json` (global) — a project-level `.gemini/settings.json` works too, but this tool isn't tied to any one repo:
+
+```json
+{
+  "mcpServers": {
+    "overleaf-resume": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js"]
+    }
+  }
+}
+```
+
+See [examples/gemini_settings.json](examples/gemini_settings.json). Gemini CLI expands `$VAR` references inside a server's `env` block if you ever need to inject a secret that way — not needed here since `.env` covers it.
+
+### Ollama
+
+Ollama itself is a model runtime, not an MCP client — it has no built-in concept of "MCP servers" to connect to. To use this server with a local Ollama model, put an MCP-aware layer in between:
+
+- [mcp-client-for-ollama](https://github.com/jonigl/mcp-client-for-ollama) (`ollmcp`) — a terminal client that connects a local Ollama model to one or more MCP servers, this one included.
+- [ollama-mcp-bridge](https://github.com/jonigl/ollama-mcp-bridge) — exposes MCP tools through Ollama's API for other tooling to consume.
+
+Either way, the command you register is the same `node /ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js` — consult that project's docs for exactly where its config lives.
 
 ---
 

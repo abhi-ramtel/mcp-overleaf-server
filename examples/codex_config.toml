@@ -1,0 +1,15 @@
+# Add this table to ~/.codex/config.toml (or a project-scoped .codex/config.toml).
+# Replace /ABSOLUTE/PATH/... with your real path — Codex spawns the process
+# directly, so it does not expand shell variables or `~`.
+#
+# Prefer the built server (node dist/index.js after `npm run build`). The
+# server reads .env from its own directory, so an [mcp_servers.*.env] block
+# below is optional — only add one to override a value for this client.
+
+[mcp_servers.overleaf-resume]
+command = "node"
+args = ["/ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js"]
+
+# Equivalent one-liner, no manual TOML editing:
+#   codex mcp add overleaf-resume -- node /ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js
+# Verify it registered with: codex mcp list

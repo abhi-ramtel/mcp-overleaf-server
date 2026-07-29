@@ -1,0 +1,12 @@
+{
+  "//": "Copy the 'overleaf-resume' block into ~/.gemini/settings.json (global) or .gemini/settings.json (project).",
+  "//note": "Prefer the built server (node dist/index.js after `npm run build`). The server reads .env from its own dir, so an env block here is optional.",
+  "mcpServers": {
+    "overleaf-resume": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/mcp-overleaf-server/dist/index.js"
+      ]
+    }
+  }
+}
