@@ -74,8 +74,18 @@ const ATS_GUIDANCE = `## ATS optimization
   below — but only where it's truthful. No keyword stuffing.
 - Lead bullets with strong action verbs; keep quantified impact that already exists.
 - Drop weak or irrelevant bullets; prioritize the most relevant experience/projects.
-- Keep it to ONE page: select the strongest ~2-3 experiences and ~2-4 projects,
-  and trim bullets. It's better to cut than to overflow.`;
+
+## Page density — FILL the page
+
+The target is one page that is *full*, not one page that is half empty. A résumé
+ending two-thirds down the page wastes the most valuable space you have.
+
+- **THREE bullets for every experience entry.** Not one, not two — three.
+- **At least TWO bullets for every project.** Three for the most relevant ones.
+- Include roughly **3 experiences and 3-4 projects**, then adjust to fit.
+- Bullets should be substantial: a full line or two of real detail, not four words.
+- Only trim if the render actually reports more than one page. Under-filling is
+  the more common failure, and it looks worse than a dense page.`;
 
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 

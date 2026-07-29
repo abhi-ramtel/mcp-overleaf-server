@@ -54,9 +54,12 @@ export function registerPrompts(server: McpServer): void {
         `${n++}. Call \`prepare_tailoring\` with the job description below${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, template="${tpl}"` +
           (questionList.length ? `, and questions=${JSON.stringify(questionList)}` : "") +
           ".",
-        `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite/shorten ` +
-          "existing bullets to fit the job, keep it to one page, weave in truthful JD keywords, and cite the " +
-          "sourceId for every bullet and entry. Do NOT invent anything or add numbers not in the source.",
+        `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite ` +
+          "existing bullets to fit the job, weave in truthful JD keywords, and cite the sourceId for every " +
+          "bullet and entry. Do NOT invent anything or add numbers not in the source. " +
+          "FILL THE PAGE: give every experience entry THREE bullets and every project at least TWO " +
+          "(three for the most relevant), aiming for ~3 experiences and ~3-4 projects. A one-page résumé " +
+          "with whitespace at the bottom is a wasted page — only trim if the render reports 2+ pages.",
         `${n++}. Call \`render_and_compile\` ONCE with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, and the same jobDescription (for ATS coverage).` +
           (wantLetter
             ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
@@ -64,9 +67,10 @@ export function registerPrompts(server: McpServer): void {
               "brief close — drawn only from my master CV, no invented employers, projects, or figures. This " +
               "produces the résumé and the matching letter together."
             : ""),
-        `${n++}. That single call produces the résumé, the CV, and the cover letter, and logs the application ` +
-          "to the tracker automatically — no separate update_tracker call is needed. If the result reports " +
-          "provenance warnings, more than one page, or a cover-letter warning, revise and call it again.",
+        `${n++}. That single call produces the résumé and the cover letter from my own templates/main.tex, ` +
+          "and logs the application automatically — no separate update_tracker call, and do NOT generate a " +
+          "separate CV (it uses a different template). If the result reports provenance warnings, more than " +
+          "one page, or that the PAGE IS UNDER-FILLED, revise the content and call it again.",
       );
       if (questionList.length) {
         steps.push(
@@ -127,7 +131,8 @@ export function registerPrompts(server: McpServer): void {
     },
     ({ jobs, template, coverLetter }) => {
       const tpl = template === "cv" ? "cv" : "resume";
-      const wantLetter = /^(true|yes|1)$/i.test(coverLetter ?? "");
+      // Default ON, matching the documented behaviour and the single-job prompt.
+      const wantLetter = !/^(false|no|0)$/i.test(coverLetter ?? "");
 
       const text = [
         `Tailor my ${tpl} for each of the jobs below (max 10). Be economical: do NOT write content for every ` +
@@ -140,8 +145,9 @@ export function registerPrompts(server: McpServer): void {
         `2. Call \`batch_plan\` with that list and template="${tpl}". It deterministically clusters similar roles ` +
           "and checks the cache, then returns the exact indices that need fresh content.",
         "3. Write TailoredContent JSON ONLY for the indices it marks GENERATE. Do not write content for the " +
-          "others — the server resolves theirs automatically. Keep each to one page and cite a sourceId for " +
-          "every bullet and entry.",
+          "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry, and " +
+          "FILL THE PAGE: three bullets per experience entry, two or more per project, ~3 experiences and " +
+          "~3-4 projects. Only trim if a render reports more than one page.",
         "4. Call `batch_render` ONCE with all jobs: pass `content` for the generated ones, and `reuseFrom` " +
           "(the index or cache key from the plan) for the rest. Every job is compiled and logged to the " +
           "tracker automatically — no separate update_tracker calls needed." +

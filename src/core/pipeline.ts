@@ -123,7 +123,48 @@ export interface RenderOutput {
   ats?: { percent: number; matched: string[]; missing: string[]; gap: GapResult };
   /** Set when the run was auto-logged to the application tracker. */
   tracked?: { created: boolean; total: number };
+  /** Content-density signals — used to flag a page that is under-filled. */
+  density?: {
+    experienceEntries: number;
+    projectEntries: number;
+    totalBullets: number;
+    /** Entries carrying fewer bullets than the target (3 per role, 2 per project). */
+    thinEntries: string[];
+    underFilled: boolean;
+  };
   error?: string;
+}
+
+/** Target bullet counts — a one-page résumé should be full, not half empty. */
+const TARGET_BULLETS_PER_ROLE = 3;
+const TARGET_BULLETS_PER_PROJECT = 2;
+/** Below this many total bullets a single page will visibly under-fill. */
+const MIN_TOTAL_BULLETS = 12;
+
+function measureDensity(content: TailoredContent): NonNullable<RenderOutput["density"]> {
+  const thinEntries: string[] = [];
+  let totalBullets = 0;
+
+  for (const e of content.experience) {
+    totalBullets += e.bullets.length;
+    if (e.bullets.length < TARGET_BULLETS_PER_ROLE) {
+      thinEntries.push(`${e.organization} (${e.bullets.length}/${TARGET_BULLETS_PER_ROLE} bullets)`);
+    }
+  }
+  for (const p of content.projects) {
+    totalBullets += p.bullets.length;
+    if (p.bullets.length < TARGET_BULLETS_PER_PROJECT) {
+      thinEntries.push(`${p.name} (${p.bullets.length}/${TARGET_BULLETS_PER_PROJECT} bullets)`);
+    }
+  }
+
+  return {
+    experienceEntries: content.experience.length,
+    projectEntries: content.projects.length,
+    totalBullets,
+    thinEntries,
+    underFilled: totalBullets < MIN_TOTAL_BULLETS || thinEntries.length > 0,
+  };
 }
 
 /**
@@ -201,6 +242,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
   await writeFile(texPath, tex, "utf-8");
 
   const out: RenderOutput = { ok: true, outputBase: base, templateSource, texPath, provenance, validation };
+  out.density = measureDensity(content);
 
   if (input.compile !== false) {
     const pdfPath = join(config.outputDir, `${base}.pdf`);
@@ -262,7 +304,15 @@ export interface ApplicationSetInput {
   jdSummary?: string;
   headerLine?: string;
   templateFile?: string;
-  /** Produce the CV as well as the résumé (default true). */
+  /**
+   * Also produce a CV (default **false**).
+   *
+   * Off by default because the CV renders from a *different* template than the
+   * résumé — `templates/main.tex` is the résumé, while the CV falls back to the
+   * bundled `cv-template.tex` unless you supply your own `templates/cv.tex`.
+   * Generating both by default produced two documents in unrelated designs and
+   * doubled the work for no benefit.
+   */
   alsoCv?: boolean;
 }
 
@@ -298,8 +348,8 @@ export async function renderApplicationSet(input: ApplicationSetInput): Promise<
   const result: ApplicationSetResult = { resume };
   if (!resume.ok) return result;
 
-  // 2. CV (same content unless a fuller cvContent was supplied).
-  if (input.alsoCv !== false) {
+  // 2. CV — opt-in only (see ApplicationSetInput.alsoCv).
+  if (input.alsoCv === true) {
     result.cv = await runRenderPipeline({
       content: input.cvContent ?? input.content,
       template: "cv",
