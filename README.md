@@ -117,19 +117,40 @@ Either way, the command you register is the same `node /ABSOLUTE/PATH/mcp-overle
 
 ## Usage
 
-### One job
+### First: how to invoke a prompt in your client
 
-In Claude Code, MCP prompts are namespaced — type `/mcp` to pick from the list, or:
+The two prompts (`tailor_resume`, `tailor_multiple_jobs`) surface differently depending on the client:
+
+| Client | How to invoke |
+|---|---|
+| **Claude Code** | Type `/mcp` and pick from the list, or type the namespaced name: `/mcp__overleaf-resume__tailor_resume` |
+| **Claude Desktop** | The **➕** button next to the message box — *not* a typed slash command |
+| **Codex / Gemini CLI / Cursor** | Prompt support varies. If you don't see them, just ask in plain English (below) — the tools work regardless |
+
+**You never actually need the prompts.** They're convenience wrappers. Asking in plain English works everywhere:
+
+> Tailor my resume for this job and write a cover letter:
+> *(paste the full posting)*
+
+> [!IMPORTANT]
+> **Paste the full posting text, not a URL.** Most job boards (Ashby, Greenhouse, Lever) render postings with JavaScript, so a link fetches nothing. An empty or stub `jobDescription` is now rejected outright — tailoring, ATS scoring, and the cover letter all depend on that text.
+
+### One job
 
 ```
 /mcp__overleaf-resume__tailor_resume
 ```
 
-with `jobDescription="…paste the posting…"`, `company="Acme"`, `position="Backend Engineer"`.
+| Argument | Required | Notes |
+|---|---|---|
+| `jobDescription` | **yes** | The full posting text (≥100 chars) |
+| `company` / `position` | recommended | Used for filenames and the tracker row |
+| `jobUrl` | optional | Recorded in the tracker |
+| `questions` | optional | Portal questions, one per line — answered in chat |
+| `coverLetter` | optional | `"false"` to skip the letter (default: generate it) |
+| `template` | optional | `"resume"` (default) or `"cv"` |
 
-In Claude Desktop, prompts appear under the **➕** button, not as typed slash commands. Or just ask in chat: *"Tailor my resume for this job: `<paste>`"*.
-
-This produces the résumé **and** a matching cover letter, then logs the application — all in one call.
+**Produces:** `Company_Position.pdf`, `Company_Position_CV.pdf`, `Company_Position_CoverLetter.pdf`, plus one tracker row — all from a single `render_and_compile` call.
 
 ### Many jobs at once (up to 10)
 
@@ -137,19 +158,20 @@ This produces the résumé **and** a matching cover letter, then logs the applic
 /mcp__overleaf-resume__tailor_multiple_jobs
 ```
 
-Pass `jobs` as either JSON or `---`-separated blocks:
+Pass `jobs` as `---`-separated blocks. `Company:`, `Position:`, `Job URL:`, and `Question:` lines are parsed as fields; everything else is the description:
 
 ```
 Company: Nuro
 Position: Software Engineer
-<paste the JD>
+Question: Why do you want to work here?
+<paste the full JD>
 ---
 Company: Waymo
 Position: Backend Engineer
-<paste the JD>
+<paste the full JD>
 ```
 
-**This is the credit-efficient path.** `batch_plan` clusters the jobs by keyword similarity and checks a cross-session cache, then tells the model exactly which jobs need fresh reasoning. Ten backend roles cost **one** reasoning pass, not ten — the rest are rendered from reused content. `batch_render` then compiles, writes cover letters, and logs every job in a single call.
+**This is the credit-efficient path.** `batch_plan` clusters jobs by keyword similarity and checks a cross-session cache, then names exactly which jobs need fresh reasoning. Similar roles share one pass:
 
 ```
 Batch plan — 5 job(s), 2 reasoning pass(es) needed, 3 saved by reuse.
@@ -161,7 +183,48 @@ Batch plan — 5 job(s), 2 reasoning pass(es) needed, 3 saved by reuse.
   #4  Stripe — Backend Engineer     [resume]  →  reuse cache "acme|backend engineer" (0.72)
 ```
 
-Tune reuse aggressiveness with `threshold` (0–1, default `0.65`) on `batch_plan`.
+Tune with `threshold` (0–1, default `0.6`) — raise it toward `0.9` to force fresh reasoning per job.
+
+> Reuse means an **identical** résumé body, not a re-tailored one. For a role you care about, run it single-job or raise the threshold.
+
+### Calling tools directly
+
+You can ask for any individual tool by name instead of running a whole prompt:
+
+| You want to… | Say something like |
+|---|---|
+| See your parsed CV and its IDs | *"Show me my master CV"* → `get_master_cv` |
+| Score an existing résumé against a JD | *"ATS-check this resume against this posting"* → `ats_report` |
+| Review what you've applied to | *"List my applications"* → `list_applications` |
+| Add a row manually | *"Mark the Nuro application as applied"* → `update_tracker` |
+| Write only a cover letter | *"Write a cover letter for X"* → `render_cover_letter` |
+| Pull your Overleaf templates | *"Sync my Overleaf project"* → `overleaf_sync` |
+
+### After it runs
+
+Everything lands in `output/`:
+
+```bash
+open output/
+```
+
+- `Company_Position.pdf` — the one-page résumé
+- `Company_Position_CV.pdf` — the fuller CV
+- `Company_Position_CoverLetter.pdf` — the letter
+- `applications.csv` — the tracker (opens in Excel / Google Sheets)
+- `.tailoring-cache.json` — reuse cache; delete it to force fresh reasoning
+
+Read the tool's response before sending anything out. It reports **ATS coverage**, which missing keywords are *truthfully addable* vs. *absent from your CV*, any **provenance warnings** (a number or skill it couldn't trace to `cv.md`), and a warning if a document ran past one page.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| "No batch processing tool available" / tools missing | The client cached an old tool list — **fully quit and reopen it** (⌘Q, not just closing the window) |
+| No cover letter produced | The model didn't pass `coverLetter`. Usually caused by an empty `jobDescription` — paste the real posting and re-run |
+| "job description is empty or too short" | Working as intended — paste the posting text, not a URL |
+| Overleaf sync says unavailable | Overleaf git access is a paid feature. Not an error; local templates are used instead |
+| Compile fails | Check `latexmk --version`; install MacTeX / TeX Live |
 
 ---
 

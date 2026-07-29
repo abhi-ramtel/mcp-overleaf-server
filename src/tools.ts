@@ -130,6 +130,16 @@ export function registerTools(server: McpServer): void {
     },
     async ({ jobDescription, company, position, jobUrl, template, questions }) =>
       guard(async () => {
+        // An empty/stub JD silently produces zero keywords, no ATS signal, and
+        // nothing for a cover letter to reference — fail loudly instead.
+        if (jobDescription.trim().length < 100) {
+          return fail(
+            `The job description is empty or too short (${jobDescription.trim().length} chars). ` +
+              "Paste the full posting text — tailoring, ATS scoring, and the cover letter all depend on it. " +
+              "Note that pasting only a URL does not work: most job boards render the posting with JavaScript, " +
+              "so fetch the text yourself and pass it here.",
+          );
+        }
         const cv = await loadMasterCv();
         const masterCvText = await readFile(config.cvMasterPath, "utf-8");
         const brief = buildTailoringBrief(cv, {
@@ -257,7 +267,11 @@ export function registerTools(server: McpServer): void {
         } else if (set.coverLetter) {
           lines.push(`⚠️  Cover letter failed: ${set.coverLetter.error}`);
         } else {
-          lines.push("ℹ️  No cover letter — pass `coverLetter` to produce it in the same call.");
+          lines.push(
+            "⚠️  NO COVER LETTER WAS GENERATED. You did not pass `coverLetter`. Unless the user explicitly " +
+              "opted out, call this tool again with a `coverLetter` (3-4 paragraphs grounded in the master CV) " +
+              "so the application set is complete.",
+          );
         }
 
         if (r.provenance.warnings.length) {
