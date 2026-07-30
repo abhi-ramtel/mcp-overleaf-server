@@ -26,7 +26,7 @@ export function registerPrompts(server: McpServer): void {
           .string()
           .optional()
           .describe("Application-portal questions, one per line — answered in chat, not in any document"),
-        template: z.string().optional().describe('"resume" (default) or "cv"'),
+        template: z.string().optional().describe('"resume" (default) or "cv" when templates/cv.tex exists'),
         project: z.string().optional().describe("Overleaf project URL/id (optional; else uses .env / bundled templates)"),
         push: z.string().optional().describe('"true" to push the tailored .tex back to an Overleaf branch'),
         coverLetter: z.string().optional().describe('"false" to skip the cover letter (default: generate one)'),
@@ -68,8 +68,8 @@ export function registerPrompts(server: McpServer): void {
               "produces the résumé and the matching letter together."
             : ""),
         `${n++}. That single call produces the résumé and the cover letter from my own templates/main.tex, ` +
-          "and logs the application automatically — no separate update_tracker call, and do NOT generate a " +
-          "separate CV (it uses a different template). If the result reports provenance warnings, more than " +
+          "and logs the application automatically — no separate update_tracker call, and does not generate a " +
+          "separate CV. If the result reports provenance warnings, more than " +
           "one page, or that the PAGE IS UNDER-FILLED, revise the content and call it again.",
       );
       if (questionList.length) {
@@ -125,7 +125,7 @@ export function registerPrompts(server: McpServer): void {
               'separated by a line of "---", each with "Company:", "Position:", optional "Question:" lines, ' +
               "then the job description.",
           ),
-        template: z.string().optional().describe('"resume" (default) or "cv"'),
+        template: z.string().optional().describe('"resume" (default) or "cv" when templates/cv.tex exists'),
         coverLetter: z.string().optional().describe('"false" to skip cover letters (default: one per job)'),
       },
     },

@@ -13,7 +13,7 @@ import { config } from "../src/config.js";
 
 test("validateTex accepts a rendered template and rejects broken ones", async () => {
   const cv = await parseCvFile(config.cvMasterPath);
-  const tpl = await readFile(join(config.templatesDir, "cv-template.tex"), "utf-8");
+  const tpl = await readFile(join(config.templatesDir, "resume-template.tex"), "utf-8");
   const tex = renderTemplate(tpl, cv, masterToTailored(cv));
 
   const ok = validateTex(tex);
@@ -58,9 +58,9 @@ test("scoreCoverage and keywordGap separate addable vs absent", async () => {
   void cv;
 });
 
-test("compileTex produces a real PDF from the rendered CV", async () => {
+test("compileTex produces a real PDF from the rendered resume", async () => {
   const cv = await parseCvFile(config.cvMasterPath);
-  const tpl = await readFile(join(config.templatesDir, "cv-template.tex"), "utf-8");
+  const tpl = await readFile(join(config.templatesDir, "resume-template.tex"), "utf-8");
   const tex = renderTemplate(tpl, cv, masterToTailored(cv));
 
   const dir = tmpdir();

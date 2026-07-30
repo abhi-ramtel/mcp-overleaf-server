@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * mcp-overleaf-server — an MCP server that tailors your Overleaf LaTeX resume/CV
- * to a job description, compiles the PDF, and tracks the application.
+ * mcp-overleaf-server — an MCP server that tailors an Overleaf LaTeX resume and
+ * cover letter to a job description, compiles them, and tracks the application.
  *
  * Design: the server is deterministic (git, parse, render, compile, track). The
  * reasoning (analyze JD, rank, rewrite) is done by the host model via the
@@ -17,7 +17,7 @@ const server = new McpServer(
   { name: "mcp-overleaf-server", version: "1.0.0" },
   {
     instructions:
-      "Tailors a resume/CV from a master cv.md to a job description without fabricating. " +
+      "Tailors a resume and cover letter from a master cv.md to a job description without fabricating. " +
       "Typical flow: prepare_tailoring (get the brief) → you produce TailoredContent JSON → " +
       "render_and_compile (PDF + provenance + ATS) → update_tracker. Or run the /tailor_resume prompt. " +
       "Overleaf: overleaf_sync to pull templates, overleaf_commit_push to publish back.",

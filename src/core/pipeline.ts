@@ -58,17 +58,17 @@ export async function resolveTemplate(choice: TemplateChoice): Promise<{ tex: st
     if (!existsSync(p)) throw new Error(`Template file not found: ${choice.templateFile}`);
     return { tex: await readFile(p, "utf-8"), source: p };
   }
-  // Resolve by document type, preferring YOUR document over the bundled fallback:
-  //   resume → templates/main.tex (your polished résumé) else resume-template.tex
-  //   cv     → templates/cv.tex / main-cv.tex          else cv-template.tex
+  // Resolve by document type, preferring YOUR document over the bundled resume
+  // fallback. CVs are supported only when the user supplies their own CV
+  // template; the package deliberately does not bundle one.
   // RESUME_TEMPLATE / CV_TEMPLATE env vars override the search entirely.
   const type = choice.template ?? "resume";
   const envFile = (type === "cv" ? process.env.CV_TEMPLATE : process.env.RESUME_TEMPLATE)?.trim();
   const candidates = envFile
     ? [envFile]
     : type === "cv"
-      ? ["cv.tex", "main-cv.tex", "cv-template.tex"]
-      : ["main.tex"];
+      ? ["cv.tex", "main-cv.tex"]
+      : ["main.tex", "resume-template.tex"];
 
   for (const name of candidates) {
     const p = isAbsolute(name) ? name : join(config.templatesDir, name);
@@ -308,10 +308,9 @@ export interface ApplicationSetInput {
    * Also produce a CV (default **false**).
    *
    * Off by default because the CV renders from a *different* template than the
-   * résumé — `templates/main.tex` is the résumé, while the CV falls back to the
-   * bundled `cv-template.tex` unless you supply your own `templates/cv.tex`.
-   * Generating both by default produced two documents in unrelated designs and
-   * doubled the work for no benefit.
+   * résumé. A CV is generated only when you explicitly supply your own
+   * `templates/cv.tex` (or `CV_TEMPLATE`) and opt in. This avoids pairing the
+   * cover letter with an unrelated bundled document.
    */
   alsoCv?: boolean;
 }
@@ -324,9 +323,10 @@ export interface ApplicationSetResult {
 }
 
 /**
- * Render a complete application: résumé, CV, and cover letter, then write a
- * single tracker row naming all three. Tracking happens once at the end so the
- * row is complete rather than being written before the other documents exist.
+ * Render a complete application: résumé, optional CV, and cover letter, then
+ * write a single tracker row naming every produced document. Tracking happens
+ * once at the end so the row is complete rather than being written before the
+ * other documents exist.
  */
 export async function renderApplicationSet(input: ApplicationSetInput): Promise<ApplicationSetResult> {
   const baseName = outputBaseName(input.company, input.position);
@@ -348,18 +348,32 @@ export async function renderApplicationSet(input: ApplicationSetInput): Promise<
   const result: ApplicationSetResult = { resume };
   if (!resume.ok) return result;
 
-  // 2. CV — opt-in only (see ApplicationSetInput.alsoCv).
+  // 2. CV — opt-in only (see ApplicationSetInput.alsoCv). A missing CV template
+  // must not discard an already-rendered résumé and cover letter, so template
+  // resolution failures are reported as a failed CV rather than thrown.
   if (input.alsoCv === true) {
-    result.cv = await runRenderPipeline({
-      content: input.cvContent ?? input.content,
-      template: "cv",
-      company: input.company,
-      position: input.position,
-      outputName: `${baseName}_CV`,
-      headerLine: input.headerLine,
-      jobDescription: input.jobDescription,
-      autoTrack: false,
-    });
+    try {
+      result.cv = await runRenderPipeline({
+        content: input.cvContent ?? input.content,
+        template: "cv",
+        company: input.company,
+        position: input.position,
+        outputName: `${baseName}_CV`,
+        headerLine: input.headerLine,
+        jobDescription: input.jobDescription,
+        autoTrack: false,
+      });
+    } catch (err) {
+      result.cv = {
+        ok: false,
+        outputBase: `${baseName}_CV`,
+        templateSource: "",
+        provenance: { ok: true, errors: [], warnings: [] },
+        error:
+          (err instanceof Error ? err.message : String(err)) +
+          " Add your own templates/cv.tex (or set CV_TEMPLATE) to generate a CV; the résumé and cover letter were produced normally.",
+      };
+    }
   }
 
   // 3. Cover letter.

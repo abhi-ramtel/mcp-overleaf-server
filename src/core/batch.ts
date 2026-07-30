@@ -290,7 +290,7 @@ export interface BatchRenderItem {
   coverLetter?: unknown;
   /** Optional fuller CV content; defaults to the résumé content. */
   cvContent?: unknown;
-  /** Generate the CV too (default true). */
+  /** Generate a CV too, using the user's own CV template (default false). */
   alsoCv?: boolean;
 }
 
@@ -364,7 +364,7 @@ export async function runBatch(items: BatchRenderItem[]): Promise<BatchRunResult
       if (item.summary?.trim()) content = { ...content, summary: item.summary.trim() };
 
       const template = item.template ?? "resume";
-      // A full application set: résumé + CV + cover letter, logged as one row.
+      // An application set: résumé + optional CV + cover letter, logged as one row.
       const set = await renderApplicationSet({
         content,
         cvContent: item.cvContent,
@@ -457,8 +457,8 @@ export function formatPlan(plan: BatchPlan): string {
     "",
     `Write TailoredContent JSON ONLY for indices: [${plan.needsGeneration.join(", ") || "none"}].`,
     "Then call `batch_render` once with every job — supply `content` for generated ones and leave",
-    "it out for reuse ones (the server pulls their content automatically). Each job produces a résumé,",
-    "a CV, and (when you pass `coverLetter`) a cover letter, all logged to the tracker automatically.",
+    "it out for reuse ones (the server pulls their content automatically). Each job produces a résumé and,",
+    "when you pass `coverLetter`, a cover letter — all logged to the tracker automatically.",
   );
   return lines.join("\n");
 }

@@ -14,10 +14,10 @@ test("escapeLatex escapes special characters and normalizes unicode", () => {
   assert.equal(escapeLatex("C_underscore #hash $money"), "C\\_underscore \\#hash \\$money");
 });
 
-test("renders cv-template.tex with no unresolved placeholders", async () => {
+test("renders resume-template.tex with no unresolved placeholders", async () => {
   const cv = await parseCvFile(config.cvMasterPath);
   const content = masterToTailored(cv);
-  const template = await readFile(path.join(config.templatesDir, "cv-template.tex"), "utf-8");
+  const template = await readFile(path.join(config.templatesDir, "resume-template.tex"), "utf-8");
   const tex = renderTemplate(template, cv, content);
 
   const leftover = tex.match(/\{\{[A-Z_]+\}\}/g);
@@ -43,15 +43,15 @@ test("renders resume-template.tex including the summary", async () => {
 test("experience uses {org}{dates}{title}{loc} order; email has single mailto", async () => {
   const cv = await parseCvFile(config.cvMasterPath);
   const content = masterToTailored(cv);
-  const template = await readFile(path.join(config.templatesDir, "cv-template.tex"), "utf-8");
+  const template = await readFile(path.join(config.templatesDir, "resume-template.tex"), "utf-8");
   const tex = renderTemplate(template, cv, content);
 
   // First \resumeSubheading must render EXP1 in {org}{dates}{title}{loc} order —
   // derived from the parsed CV so editing cv.md never breaks this test.
   const e0 = cv.experience[0]!;
   // Scope to the Experience section — Education also uses \resumeSubheading and
-  // renders before Experience in cv-template.tex.
-  const expSlice = tex.slice(Math.max(0, tex.indexOf("Work Experience")));
+  // renders after Experience in resume-template.tex.
+  const expSlice = tex.slice(Math.max(0, tex.indexOf("Experience")));
   const m = expSlice.match(/\\resumeSubheading\s*\n\s*\{([^}]*)\}\{([^}]*)\}\s*\n\s*\{([^}]*)\}\{([^}]*)\}/);
   assert.ok(m, "first \\resumeSubheading present");
   assert.equal(m![1], escapeLatex(e0.organization));

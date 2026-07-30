@@ -164,7 +164,7 @@ export function registerTools(server: McpServer): void {
         "Produce the application in one call: résumé + cover letter, compiled to PDF and logged to the " +
         "tracker as a single row. Every bullet is verified against the master CV (anti-fabrication) before " +
         "anything compiles. Always pass `coverLetter` unless the user opted out. " +
-        "A separate CV is NOT generated unless you pass alsoCv:true (it renders from a different template). " +
+        "A separate CV is NOT generated unless you pass alsoCv:true and configure your own CV template. " +
         "Aim for 3 bullets per experience entry and 2+ per project so the page fills; the response warns " +
         "when the page is under-filled. Returns provenance warnings and an ATS coverage report.",
       inputSchema: {
@@ -172,7 +172,7 @@ export function registerTools(server: McpServer): void {
         cvContent: TailoredContentSchema.optional().describe(
           "Optional fuller content for the CV (more roles/projects). Defaults to the résumé content.",
         ),
-        alsoCv: z.boolean().optional().describe("Also render a separate CV from the CV template (default false)"),
+        alsoCv: z.boolean().optional().describe("Also render a separate CV from your templates/cv.tex (default false)"),
         coverLetter: CoverLetterContentSchema.optional().describe(
           "Cover letter content — pass this to generate the résumé and letter together (recommended)",
         ),
@@ -236,7 +236,7 @@ export function registerTools(server: McpServer): void {
           return ok(single.join("\n"));
         }
 
-        // Full application set: résumé + CV + cover letter, one tracker row.
+        // Application set: résumé + optional CV + cover letter, one tracker row.
         const set = await renderApplicationSet({
           content: args.content,
           cvContent: args.cvContent,
@@ -415,7 +415,7 @@ export function registerTools(server: McpServer): void {
               headerLine: z.string().optional(),
               coverLetter: CoverLetterContentSchema.optional().describe("Produced alongside the résumé for this job"),
               cvContent: TailoredContentSchema.optional().describe("Optional fuller CV content; defaults to the résumé content"),
-              alsoCv: z.boolean().optional().describe("Also render a separate CV from the CV template (default false)"),
+              alsoCv: z.boolean().optional().describe("Also render a separate CV from your templates/cv.tex (default false)"),
             }),
           )
           .min(1)

@@ -1,6 +1,6 @@
 # mcp-overleaf-server
 
-An [MCP](https://modelcontextprotocol.io) server that tailors your **LaTeX résumé, CV, and cover letter** to any job description — injecting truthfully-selected content from a master `cv.md` into *your own* LaTeX document, compiling the PDF, and logging the application automatically. Paste a job description into any MCP client (Claude Desktop, Cursor, VS Code, Windsurf) and get back an ATS-optimized, one-page PDF.
+An [MCP](https://modelcontextprotocol.io) server that tailors your **LaTeX résumé and cover letter** to any job description — injecting truthfully-selected content from a master `cv.md` into *your own* LaTeX document, compiling the PDF, and logging the application automatically. Paste a job description into any MCP client (Claude Desktop, Cursor, VS Code, Windsurf) and get back an ATS-optimized, one-page PDF.
 
 > **Truthfulness is enforced by code, not just prompts.** The server refuses to compile any bullet that can't be traced back to your master CV, and flags any new number or skill for review.
 
@@ -148,9 +148,9 @@ The two prompts (`tailor_resume`, `tailor_multiple_jobs`) surface differently de
 | `jobUrl` | optional | Recorded in the tracker |
 | `questions` | optional | Portal questions, one per line — answered in chat |
 | `coverLetter` | optional | `"false"` to skip the letter (default: generate it) |
-| `template` | optional | `"resume"` (default) or `"cv"` |
+| `template` | optional | `"resume"` (default), or `"cv"` when you have supplied `templates/cv.tex` |
 
-**Produces:** `Company_Position.pdf`, `Company_Position_CV.pdf`, `Company_Position_CoverLetter.pdf`, plus one tracker row — all from a single `render_and_compile` call.
+**Produces:** `Company_Position.pdf` and `Company_Position_CoverLetter.pdf`, plus one tracker row — all from a single `render_and_compile` call. A separate CV is only produced when you explicitly configure your own `templates/cv.tex` and pass `alsoCv: true`.
 
 ### Many jobs at once (up to 10)
 
@@ -209,7 +209,6 @@ open output/
 ```
 
 - `Company_Position.pdf` — the one-page résumé
-- `Company_Position_CV.pdf` — the fuller CV
 - `Company_Position_CoverLetter.pdf` — the letter
 - `applications.csv` — the tracker (opens in Excel / Google Sheets)
 - `.tailoring-cache.json` — reuse cache; delete it to force fresh reasoning
@@ -298,15 +297,15 @@ src/
     overleafGit.ts      project-URL → authed git; clone/pull/branch/commit/push
     brief.ts            the tailoring brief prepare_tailoring returns
     pipeline.ts         compose layer (render→validate→compile→save→log)
-templates/              main.tex (yours, gitignored) · cv-template.tex · resume-template.tex
+templates/              main.tex (yours, gitignored) · resume-template.tex
                         cover-letter-template.tex · AUTHORING.md
-test/                   39 unit + integration tests (incl. real PDF compiles)
+test/                   43 unit + integration tests (incl. real PDF compiles)
 ```
 
 ## Development
 
 ```bash
-npm test         # 39 tests, including real latexmk compiles
+npm test         # 43 tests, including real latexmk compiles
 npm run typecheck
 npm run build
 ```

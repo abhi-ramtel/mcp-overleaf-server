@@ -1,7 +1,7 @@
 {
   "name": "mcp-overleaf-server",
   "version": "1.0.0",
-  "description": "MCP server that tailors your Overleaf LaTeX resume & CV to a job description — pull, render, compile, track — from any MCP client.",
+  "description": "MCP server that tailors your Overleaf LaTeX resume and cover letter to a job description — pull, render, compile, track — from any MCP client.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,9 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates/AUTHORING.md",
+    "templates/cover-letter-template.tex",
+    "templates/resume-template.tex"
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
