@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseProject, safeResolve, redact, listTexFiles } from "../src/core/overleafGit.js";
 
-// The git module reads OL_GIT_AUTHENTICATION_TOKEN via config at parse time.
+// config.overleafToken is a plain value computed once when config.ts loads, not
+// a live getter — and static imports are hoisted above a module's own top-level
+// statements, so a `process.env... ??=` placed after a static import of
+// overleafGit.js (which transitively imports config.js) runs too late to have
+// any effect. Set the env var first, then dynamically import so the module
+// graph loads afterward and actually observes it.
 process.env.OL_GIT_AUTHENTICATION_TOKEN ??= "olp_testtoken";
+const { parseProject, safeResolve, redact, listTexFiles } = await import("../src/core/overleafGit.js");
 
 test("parseProject accepts a full URL and a bare id", () => {
   const fromUrl = parseProject("https://www.overleaf.com/project/6a309c9641ac036f96aa4e9f");

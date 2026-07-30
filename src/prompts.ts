@@ -67,10 +67,13 @@ export function registerPrompts(server: McpServer): void {
               "brief close — drawn only from my master CV, no invented employers, projects, or figures. This " +
               "produces the résumé and the matching letter together."
             : ""),
-        `${n++}. That single call produces the résumé and the cover letter from my own templates/main.tex, ` +
-          "and logs the application automatically — no separate update_tracker call, and does not generate a " +
-          "separate CV. If the result reports provenance warnings, more than " +
-          "one page, or that the PAGE IS UNDER-FILLED, revise the content and call it again.",
+        `${n++}. That single call produces the résumé${wantLetter ? " and the cover letter" : ""} from my own ` +
+          "templates/main.tex, and logs the application automatically — no separate update_tracker call, and " +
+          "does not generate a separate CV. If the result reports provenance warnings, more than one page, or " +
+          "that the PAGE IS UNDER-FILLED, revise the content and call it again." +
+          (wantLetter
+            ? ""
+            : " Do NOT pass `coverLetter` to render_and_compile — I opted out of a cover letter for this job."),
       );
       if (questionList.length) {
         steps.push(
@@ -154,7 +157,7 @@ export function registerPrompts(server: McpServer): void {
           (wantLetter
             ? " Also give each job a `coverLetter` in the same call so the letters are produced alongside the " +
               "résumés; reuse the same proof points across similar roles and vary only the company-specific opening."
-            : ""),
+            : " Do NOT give any job a `coverLetter` — cover letters were opted out of for this batch."),
         "5. Report a short table: company, position, pages, ATS %, and whether it was generated or reused. " +
           "Only revise jobs that came back with warnings or more than one page.",
         "6. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
