@@ -155,6 +155,14 @@ The two prompts (`tailor_resume`, `tailor_multiple_jobs`) surface differently de
 ### Many jobs at once (up to 10)
 
 ```
+/jobs
+```
+
+Pick how many jobs you're doing, and you get that many entry cards in the chat — company, role, URL, job description, application questions, cover letter on or off. Fill them in, hit **Tailor them**, and the batch runs. Leave company or role blank and they're read off the posting.
+
+`/jobs` is a project skill (`.claude/skills/jobs/`) and needs a client that renders in-chat forms — the Claude Code desktop app does. Everywhere else, use the MCP prompt:
+
+```
 /mcp__overleaf-resume__tailor_multiple_jobs
 ```
 
@@ -299,6 +307,7 @@ src/
     pipeline.ts         compose layer (render→validate→compile→save→log)
 templates/              main.tex (yours, gitignored) · resume-template.tex
                         cover-letter-template.tex · AUTHORING.md
+.claude/skills/jobs/    /jobs — the in-chat multi-job entry form
 test/                   43 unit + integration tests (incl. real PDF compiles)
 ```
 
