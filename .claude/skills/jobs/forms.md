@@ -32,7 +32,7 @@ different canonical path, use that one instead — it is the source of truth.
         <button type="button" class="elicit-pill" data-value="6">6</button>
         <button type="button" class="elicit-pill" data-value="more" data-other>More</button>
       </div>
-      <input type="text" class="elicit-other" data-for="count" placeholder="How many? (up to 10)" hidden>
+      <input type="text" class="elicit-other" data-for="count" placeholder="How many? (up to 30)" hidden>
     </div>
     <div class="elicit-group">
       <label class="elicit-question">Which document should I tailor?</label>

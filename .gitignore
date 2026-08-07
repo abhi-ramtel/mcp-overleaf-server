@@ -10,7 +10,8 @@ node_modules/
 dist/
 
 # generated documents (keep the dir, ignore contents)
-output/*
+output
+output\ 2
 !output/.gitkeep
 
 # LaTeX aux files

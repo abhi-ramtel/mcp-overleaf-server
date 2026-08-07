@@ -28,7 +28,7 @@ Call `mcp__visualize__read_me` with `modules: ["elicitation"]` first — it carr
 canonical form chrome and the current design rules. Then render **form 1** from
 [forms.md](forms.md) with `mcp__visualize__show_widget`.
 
-It asks three things at once: job count (1–10), résumé vs CV, and cover letters.
+It asks three things at once: job count (1–30), résumé vs CV, and cover letters.
 Stop and wait for the reply — it arrives as the user's next message.
 
 ## Step 2 — the job cards
@@ -37,8 +37,9 @@ Render **form 2** from [forms.md](forms.md), repeating the job block exactly `N`
 times with the index incremented. Only include the per-job cover-letter pills when
 step 1 answered "let me pick per job".
 
-Cap at 10 (`MAX_BATCH_JOBS` in `src/core/batch.ts`). If more are wanted, run the
-first 10 and say so.
+Cap at 30 (`MAX_PLAN_JOBS` in `src/core/batch.ts`). If more are wanted, run the
+first 30 and say so. Above ~8 jobs the form gets long — render it anyway rather
+than splitting it; the batch itself is chunked later.
 
 ## Step 3 — parse the reply
 
@@ -61,9 +62,10 @@ the postings in plain text, `---` separated, and carry on.
 
 This is the credit-efficient path; don't write content per job blindly.
 
-1. `batch_plan` with the parsed list and the chosen template. It clusters similar
-   roles and checks the cross-session cache, then names the indices needing fresh work.
-2. Write `TailoredContent` JSON **only** for the indices marked GENERATE. Cite a
+1. `batch_plan` **once** with the whole parsed list and the chosen template. It skips
+   jobs already in the tracker, clusters similar roles, checks the cross-session cache,
+   and splits the remaining work into chunks of three — one `batch_render` call each.
+2. Write `TailoredContent` JSON **only** for the jobs marked GENERATE. Cite a
    `sourceId` for every bullet and entry. Fill the page naturally: three bullets per
    experience entry, four relevant experience entries when the master CV contains
    them, and three sourced bullets for the two or three projects most relevant to the
@@ -72,18 +74,40 @@ This is the credit-efficient path; don't write content per job blindly.
    the template's standard professional font scale, margins, and visual design — add
    evidence instead of shrinking the page. Only trim when a render reports more than
    one page.
-3. `batch_render` **once** with every job — `content` for the generated ones,
-   `reuseFrom` for the rest. Include a `coverLetter` per job unless letters were
-   opted out; reuse proof points across similar roles and vary the company-specific
-   opening. Compiling, logging, and caching all happen inside this call.
+3. `batch_render` **once per chunk**, in the plan's order, waiting for each call to
+   return before starting the next — `content` for that chunk's generated jobs,
+   `reuseFrom` copied verbatim from the plan for the rest. Include a `coverLetter` per
+   job unless letters were opted out; reuse proof points across similar roles and vary
+   the company-specific opening. Compiling, logging, and caching happen inside each call.
+
+**Never merge chunks into one call.** A long call is what times the server out, and
+that is the whole reason the plan hands back groups of three.
 
 Truthfulness beats keyword matching: only reorder, rewrite, shorten, merge, remove,
 or emphasize content that already exists in the master CV. Invent nothing.
 
+## Edge cases
+
+The server handles these; follow it rather than working around it.
+
+- **Already applied.** A job whose résumé is already in `output/applications.csv` (and
+  still on disk) is skipped, not regenerated. Say so in the report. Only pass
+  `force: true` when the user explicitly asks to redo one.
+- **Resuming.** Re-submitting the same list after a crash or a partial run is safe —
+  finished jobs skip themselves, so only the gaps get built.
+- **A chunk fails.** Fix and re-send just that job, then carry on with the next chunk.
+  Never restart the whole batch.
+- **Duplicates, blank companies, stub postings.** The plan skips them with a reason
+  instead of failing. Relay the reason and ask for what's missing.
+- **A reuse job errors with "no cached content".** The cache was cleared between plan
+  and render — re-run `batch_plan` for the remaining jobs, or write content for that
+  one job.
+- **More than 30 jobs.** Run the first 30, report the rest, and offer a second pass.
+
 ## Step 5 — report
 
-A short table: company, position, pages, ATS %, generated or reused. Revise only the
-jobs that came back with warnings or more than one page.
+A short table: company, position, pages, ATS %, and generated / reused / skipped
+(already done). Revise only the jobs that came back with warnings or more than one page.
 
 Then answer any application questions **in chat**, grouped under each company —
 first person, 3–6 sentences, grounded only in the master CV, concrete about that

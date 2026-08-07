@@ -122,8 +122,8 @@ export function registerPrompts(server: McpServer): void {
     {
       title: "Tailor résumés for several jobs at once",
       description:
-        "Batch mode: tailor up to 10 jobs in one go. Clusters similar roles and reuses cached work so " +
-        "you only reason once per role family instead of once per job.",
+        "Batch mode: tailor up to 30 jobs in one go. Skips jobs already in the tracker, clusters similar " +
+        "roles so you only reason once per role family, and renders three jobs per call so nothing times out.",
       argsSchema: {
         jobs: z
           .string()
@@ -152,7 +152,7 @@ export function registerPrompts(server: McpServer): void {
       const sourceLocation = location?.trim();
 
       const text = [
-        `Tailor my ${tpl} for each of the jobs below (max 10). Be economical: do NOT write content for every ` +
+        `Tailor my ${tpl} for each of the jobs below (max 30). Be economical: do NOT write content for every ` +
           "job independently — follow this exactly:",
         "",
         sourceLocation
@@ -165,11 +165,13 @@ export function registerPrompts(server: McpServer): void {
           "jobDescription, jobUrl, questions }. Infer company, position, and URL from each posting when they are " +
           "not explicitly labeled. For text blocks, a line of \"---\" separates jobs; lines beginning \"Company:\", " +
           '"Position:", "Job URL:" and "Question:" are fields (collect every Question line into the `questions` ' +
-          "array), and the remaining text is the job description. Cap at 10; if more are given, use the first 10 " +
+          "array), and the remaining text is the job description. Cap at 30; if more are given, run the first 30 " +
           "and say so.",
-        `2. Call \`batch_plan\` with that list and template="${tpl}". It deterministically clusters similar roles ` +
-          "and checks the cache, then returns the exact indices that need fresh content.",
-        "3. Write TailoredContent JSON ONLY for the indices it marks GENERATE. Do not write content for the " +
+        `2. Call \`batch_plan\` ONCE with the whole list and template="${tpl}". It skips jobs I have already ` +
+          "applied to, clusters similar roles, checks the cache, and splits what is left into chunks of three — " +
+          "one `batch_render` call each. Do not second-guess it: the jobs it marks SKIPPED are done, and its " +
+          "chunk boundaries exist so a single call cannot time out.",
+        "3. Write TailoredContent JSON ONLY for the jobs it marks GENERATE. Do not write content for the " +
           "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry, and " +
           "FILL THE PAGE NATURALLY: three bullets per experience entry, four relevant experience entries when " +
           "the master CV provides them, and three sourced bullets for the two or three most role-relevant " +
@@ -177,16 +179,22 @@ export function registerPrompts(server: McpServer): void {
           "master CV, never inventing JD-derived labels or skills. Preserve the template's standard professional " +
           "font scale, margins, and visual design; improve density with meaningful evidence, not compressed type. " +
           "Only trim if a render reports more than one page.",
-        "4. Call `batch_render` ONCE with all jobs: pass `content` for the generated ones, and `reuseFrom` " +
-          "(the index or cache key from the plan) for the rest. Every job is compiled and logged to the " +
-          "tracker automatically — no separate update_tracker calls needed." +
+        "4. Call `batch_render` ONCE PER CHUNK, in the plan's order, waiting for each call to return before " +
+          "starting the next. Never merge chunks into one call. In each call pass `content` for that chunk's " +
+          "GENERATE jobs and `reuseFrom` exactly as the plan printed it for the rest (an index inside that same " +
+          "call, or a cache key). Every job is compiled and logged to the tracker automatically — no separate " +
+          "update_tracker calls needed." +
           (wantLetter
             ? " Also give each job a `coverLetter` in the same call so the letters are produced alongside the " +
               "résumés; reuse the same proof points across similar roles and vary only the company-specific opening."
             : " Do NOT give any job a `coverLetter` — cover letters were opted out of for this batch."),
-        "5. Report a short table: company, position, pages, ATS %, and whether it was generated or reused. " +
-          "Only revise jobs that came back with warnings or more than one page.",
-        "6. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
+        "5. If a chunk reports a failure, fix and re-send just that job, then carry on with the next chunk — " +
+          "anything already rendered is skipped automatically, so nothing gets duplicated or overwritten. " +
+          "Never restart the whole batch because of one bad job.",
+        "6. Report a short table when every chunk is done: company, position, pages, ATS %, and whether it was " +
+          "generated, reused, or skipped as already done. Only revise jobs that came back with warnings or more " +
+          "than one page.",
+        "7. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
           "heading. First person, 3-6 sentences each, grounded only in my master CV and referencing that " +
           "company and role concretely. These do not go in any document.",
         "",

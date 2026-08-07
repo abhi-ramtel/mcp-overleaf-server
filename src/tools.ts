@@ -14,7 +14,7 @@ import { loadMasterCv, runRenderPipeline, renderApplicationSet, latexToText } fr
 import { buildTailoringBrief, masterCvForBrief } from "./core/brief.js";
 import { TailoredContentSchema, CoverLetterContentSchema } from "./core/schema.js";
 import { runCoverLetterPipeline } from "./core/coverLetter.js";
-import { planBatch, runBatch, formatPlan, MAX_BATCH_JOBS } from "./core/batch.js";
+import { planBatch, runBatch, formatPlan, MAX_BATCH_JOBS, MAX_PLAN_JOBS, DEFAULT_CHUNK_SIZE } from "./core/batch.js";
 import { extractKeywords, scoreCoverage, keywordGap } from "./core/keywords.js";
 import { recordApplication, listApplications } from "./core/tracker.js";
 import { syncRepo, commitAndPush, parseProject, redact, OverleafAccessError } from "./core/overleafGit.js";
@@ -355,12 +355,14 @@ export function registerTools(server: McpServer): void {
   server.registerTool(
     "batch_plan",
     {
-      title: "Plan a multi-job batch (saves reasoning passes)",
+      title: "Plan a multi-job batch (skips done jobs, chunks the rest)",
       description:
-        `Plan up to ${MAX_BATCH_JOBS} jobs at once. Deterministically clusters jobs by keyword similarity ` +
-        "and checks a cross-session cache, then tells you EXACTLY which jobs need fresh TailoredContent. " +
-        "Similar roles share one reasoning pass — write content only for the listed indices, then call " +
-        "batch_render once. Call this BEFORE writing any content for a multi-job request.",
+        `Plan up to ${MAX_PLAN_JOBS} jobs at once. Does three things deterministically: SKIPS jobs already in ` +
+        "the tracker (nothing is regenerated or overwritten), clusters the rest by keyword similarity and " +
+        "checks a cross-session cache so similar roles share one reasoning pass, and splits the remaining work " +
+        `into chunks of ${DEFAULT_CHUNK_SIZE} — one batch_render call each, so no single call can time out. ` +
+        "The output names the exact jobs needing fresh TailoredContent and the exact reuseFrom value for the " +
+        "rest. Call this BEFORE writing any content for a multi-job request, and follow its chunks exactly.",
       inputSchema: {
         jobs: z
           .array(
@@ -377,14 +379,22 @@ export function registerTools(server: McpServer): void {
             }),
           )
           .min(1)
-          .max(MAX_BATCH_JOBS),
+          .max(MAX_PLAN_JOBS),
         threshold: z.number().optional().describe("Similarity 0-1 above which jobs share content (default 0.6)"),
         useCache: z.boolean().optional().describe("Reuse content cached from previous sessions (default true)"),
+        chunkSize: z
+          .number()
+          .optional()
+          .describe(`Jobs per batch_render call (default ${DEFAULT_CHUNK_SIZE}, max ${MAX_BATCH_JOBS}) — leave alone unless asked`),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Re-plan jobs already in the tracker instead of skipping them (default false)"),
       },
     },
-    async ({ jobs, threshold, useCache }) =>
+    async ({ jobs, threshold, useCache, chunkSize, force }) =>
       guard(async () => {
-        const plan = await planBatch(jobs, { threshold, useCache });
+        const plan = await planBatch(jobs, { threshold, useCache, chunkSize, force });
         return ok(formatPlan(plan));
       }),
   );
@@ -393,12 +403,16 @@ export function registerTools(server: McpServer): void {
   server.registerTool(
     "batch_render",
     {
-      title: "Render, compile & log a whole batch",
+      title: "Render, compile & log one chunk of a batch",
       description:
-        "Render, compile, auto-log, and cache every job in one call — no per-job round trip. " +
-        "Each job produces a résumé (plus a cover letter when `coverLetter` is given), logged " +
-        "as one tracker row. Supply `content` only for jobs batch_plan marked GENERATE; for the rest pass " +
-        "`reuseFrom` (the batch index or cache key from the plan) and the server resolves the content itself.",
+        `Render, compile, auto-log, and cache one CHUNK of jobs — ${DEFAULT_CHUNK_SIZE} per call, ` +
+        `${MAX_BATCH_JOBS} absolute maximum. For a bigger batch call this repeatedly, once per chunk from ` +
+        "batch_plan, waiting for each call to return; do not merge chunks. Each job produces a résumé (plus a " +
+        "cover letter when `coverLetter` is given), logged as one tracker row. Supply `content` only for jobs " +
+        "batch_plan marked GENERATE; for the rest pass `reuseFrom` (the index within THIS call, or a cache key) " +
+        "and the server resolves the content itself. Jobs already in the tracker are SKIPPED, not overwritten, " +
+        "so re-sending a list only fills in what is missing — pass `force` to rebuild anyway. One bad job never " +
+        "fails the call; each is reported on its own.",
       inputSchema: {
         jobs: z
           .array(
@@ -412,28 +426,36 @@ export function registerTools(server: McpServer): void {
               reuseFrom: z
                 .union([z.number(), z.string()])
                 .optional()
-                .describe("Batch index or cache key to copy content from"),
+                .describe("Index within THIS call, or a cache key, to copy content from — exactly as batch_plan printed it"),
               summary: z.string().optional().describe("Role-specific summary override when reusing content"),
               headerLine: z.string().optional(),
               coverLetter: CoverLetterContentSchema.optional().describe("Produced alongside the résumé for this job"),
               cvContent: TailoredContentSchema.optional().describe("Optional fuller CV content; defaults to the résumé content"),
               alsoCv: z.boolean().optional().describe("Also render a separate CV from your templates/cv.tex (default false)"),
+              force: z.boolean().optional().describe("Rebuild this job even if the tracker already has it"),
             }),
           )
           .min(1)
           .max(MAX_BATCH_JOBS),
+        force: z
+          .boolean()
+          .optional()
+          .describe("Rebuild every job even if the tracker already has it (default false — those are skipped)"),
       },
     },
-    async ({ jobs }) =>
+    async ({ jobs, force }) =>
       guard(async () => {
-        const r = await runBatch(jobs as never);
+        const r = await runBatch(jobs as never, { force });
         const lines = [
-          `Batch complete — ${r.succeeded}/${r.results.length} succeeded ` +
-            `(${r.generated} generated, ${r.reused} reused)${r.failed ? `, ${r.failed} failed` : ""}.`,
+          `Chunk complete — ${r.succeeded}/${r.results.length} rendered ` +
+            `(${r.generated} generated, ${r.reused} reused)` +
+            `${r.skipped ? `, ${r.skipped} skipped (already done)` : ""}${r.failed ? `, ${r.failed} failed` : ""}.`,
           "",
         ];
         for (const j of r.results) {
-          if (j.ok) {
+          if (j.skipped) {
+            lines.push(`  ⏭  #${j.index} ${j.company} — ${j.position}: ${j.note}`);
+          } else if (j.ok) {
             lines.push(
               `  ✅ #${j.index} ${j.company} — ${j.position}` +
                 `${j.pageCount ? ` (${j.pageCount}p)` : ""}` +
@@ -444,10 +466,18 @@ export function registerTools(server: McpServer): void {
             if (j.pdfPath) lines.push(`       résumé: ${j.pdfPath}`);
             if (j.cvPath) lines.push(`       CV:     ${j.cvPath}`);
             if (j.coverLetterPath) lines.push(`       letter: ${j.coverLetterPath}`);
+            if (j.note) lines.push(`       ℹ️  ${j.note}`);
             for (const w of j.warnings) lines.push(`       ⚠️  ${w}`);
           } else {
             lines.push(`  ❌ #${j.index} ${j.company} — ${j.position}: ${j.error}`);
           }
+        }
+        if (r.failed > 0) {
+          lines.push(
+            "",
+            "Fix and re-send ONLY the failed job(s) — everything that rendered is now in the tracker and will be " +
+              "skipped automatically. Then continue with the next chunk.",
+          );
         }
         return ok(lines.join("\n"));
       }),
