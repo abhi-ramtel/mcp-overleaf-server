@@ -51,19 +51,20 @@ export function registerPrompts(server: McpServer): void {
         steps.push(`${n++}. (No Overleaf project — use the local templates, i.e. templates/main.tex.)`);
       }
       steps.push(
-        `${n++}. Call \`prepare_tailoring\` with the job description below${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, template="${tpl}"` +
+        `${n++}. Call \`prepare_tailoring\` with the job description below${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, template="${tpl}", coverLetter=${wantLetter}` +
           (questionList.length ? `, and questions=${JSON.stringify(questionList)}` : "") +
           ".",
         `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite ` +
           "existing bullets to fit the job, weave in truthful JD keywords, and cite the sourceId for every " +
           "bullet and entry. Do NOT invent anything or add numbers not in the source. " +
-          "FILL THE PAGE NATURALLY: give every experience entry THREE bullets, include four relevant " +
-          "experience entries when my master CV has them, and give the two or three most relevant projects " +
-          "THREE sourced bullets (at least two for every other project). Keep top-level skill category labels " +
-          "and skill items close to the master CV; do not create new labels or JD-derived skills. Preserve the " +
-          "template's standard professional type scale and margins — add useful evidence instead of shrinking " +
-          "the design. A one-page résumé with whitespace at the bottom is a wasted page — only trim if the " +
-          "render reports 2+ pages.",
+          "FILL THE PAGE NATURALLY: start with FOUR relevant experience entries and THREE relevant projects " +
+          "when my master CV has them, with THREE distinct sourced bullets for every selected entry that has " +
+          "that much source evidence (normally 21 bullets total). Do not drop a role or project merely because " +
+          "it is not the single best match, and do not cut content because the résumé seems likely to fit. Keep " +
+          "top-level skill category labels and skill items close to the master CV; do not create new labels or " +
+          "JD-derived skills. Preserve the template's standard professional type scale and margins — add useful " +
+          "evidence instead of shrinking the design. Only trim after the actual render reports 2+ pages; if it " +
+          "reports PAGE IS UNDER-FILLED, add sourced content and render again.",
         `${n++}. Call \`render_and_compile\` ONCE with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, and the same jobDescription (for ATS coverage).` +
           (wantLetter
             ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
@@ -173,12 +174,13 @@ export function registerPrompts(server: McpServer): void {
           "chunk boundaries exist so a single call cannot time out.",
         "3. Write TailoredContent JSON ONLY for the jobs it marks GENERATE. Do not write content for the " +
           "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry, and " +
-          "FILL THE PAGE NATURALLY: three bullets per experience entry, four relevant experience entries when " +
-          "the master CV provides them, and three sourced bullets for the two or three most role-relevant " +
-          "projects (at least two per other project). Keep top-level skill category labels and items close to the " +
-          "master CV, never inventing JD-derived labels or skills. Preserve the template's standard professional " +
-          "font scale, margins, and visual design; improve density with meaningful evidence, not compressed type. " +
-          "Only trim if a render reports more than one page.",
+          "FILL THE PAGE NATURALLY: begin with four relevant experience entries and three relevant projects " +
+          "when the master CV provides them, with three distinct sourced bullets for every selected entry that " +
+          "has that much source evidence (normally 21 bullets). Do not drop a role or project merely because it " +
+          "is not the single best match. Keep top-level skill category labels and items close to the master CV, " +
+          "never inventing JD-derived labels or skills. Preserve the template's standard professional font scale, " +
+          "margins, and visual design; improve density with meaningful evidence, not compressed type. Only trim " +
+          "after a render reports more than one page; revise any PAGE IS UNDER-FILLED result before moving on.",
         "4. Call `batch_render` ONCE PER CHUNK, in the plan's order, waiting for each call to return before " +
           "starting the next. Never merge chunks into one call. In each call pass `content` for that chunk's " +
           "GENERATE jobs and `reuseFrom` exactly as the plan printed it for the rest (an index inside that same " +

@@ -127,10 +127,55 @@ The two prompts (`tailor_resume`, `tailor_multiple_jobs`) surface differently de
 | **Claude Desktop** | The **➕** button next to the message box — *not* a typed slash command |
 | **Codex / Gemini CLI / Cursor** | Prompt support varies. If you don't see them, just ask in plain English (below) — the tools work regardless |
 
-**You never actually need the prompts.** They're convenience wrappers. Asking in plain English works everywhere:
+**You never actually need the prompts.** They're convenience wrappers. Asking in plain English works everywhere.
 
-> Tailor my resume for this job and write a cover letter:
-> *(paste the full posting)*
+### Copy-paste prompt for Codex
+
+After connecting the server and restarting Codex, paste the following into Codex and replace the bracketed fields. Codex will use the connected `overleaf-resume` tools to do the work:
+
+```text
+Please tailor my résumé for the job below and create a matching cover letter.
+
+Use my master cv.md and my existing LaTeX template. First read the tailoring brief,
+then select, reorder, and rewrite only accomplishments that are supported by my CV.
+Do not invent experience, skills, employers, projects, or numbers. Start with four
+relevant experience entries and three relevant projects when my CV supports them, with
+three distinct sourced bullets for every selected entry that has that much evidence.
+Do not cut this baseline merely because it appears likely to fit on one page. Preserve
+the template's design, and only shorten content after the compiled PDF is actually over
+one page. If it reports that the page is under-filled, add more relevant sourced content
+and compile it again.
+
+Compile the résumé and cover letter to PDF, save them with the company and role in the
+filename, and log this application in the tracker. Before you finish, tell me the PDF
+paths, ATS coverage, page count, and any provenance or formatting warnings.
+
+Company: [company name]
+Role: [job title]
+Job URL: [optional URL]
+
+Full job description:
+[paste the complete job posting text here]
+```
+
+To make only a résumé, replace “and create a matching cover letter” with “and do not create a cover letter.”
+
+### Compact job-card input for Codex
+
+You can also paste a job card by itself. Codex treats these fields as instructions, including the boolean cover-letter flag. Keep `false` unquoted — `"false"` is text, not a JSON boolean.
+
+```json
+{
+  "CompanyName": "Example Company",
+  "JobDescription": "Paste the full job posting here.",
+  "JobTitle": "Software Engineer",
+  "JobLink": "https://example.com/jobs/123",
+  "CoverLetter": false,
+  "Application Question": "Why are you interested in this role?"
+}
+```
+
+`CoverLetter: false` means **résumé only**: Codex must not generate or compile a cover letter. `Application Question` is answered in chat after the résumé is generated; it is never added to the PDF. `CompanyName`, `JobTitle`, and `JobLink` are accepted as aliases for company, position, and job URL.
 
 > [!IMPORTANT]
 > **Paste the full posting text, not a URL.** Most job boards (Ashby, Greenhouse, Lever) render postings with JavaScript, so a link fetches nothing. An empty or stub `jobDescription` is now rejected outright — tailoring, ATS scoring, and the cover letter all depend on that text.

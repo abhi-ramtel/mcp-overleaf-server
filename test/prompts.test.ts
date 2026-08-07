@@ -24,12 +24,14 @@ test("tailor_resume: opting out of a cover letter leaves no unconditional claim 
   const text = await getPromptText("tailor_resume", { jobDescription: JD, company: "H", position: "SE", coverLetter: "false" });
   assert.ok(!/produces the résumé and the cover letter/.test(text), "must not assert a letter is produced");
   assert.match(text, /Do NOT pass `coverLetter`/, "must explicitly instruct against passing one");
+  assert.match(text, /prepare_tailoring.*coverLetter=false/, "must carry the opt-out into the tailoring brief");
 }, { timeout: 30_000 });
 
 test("tailor_resume: default (no coverLetter arg) instructs producing the letter", async () => {
   const text = await getPromptText("tailor_resume", { jobDescription: JD, company: "H", position: "SE" });
   assert.match(text, /produces the résumé and the cover letter/);
   assert.ok(!/Do NOT pass `coverLetter`/.test(text));
+  assert.match(text, /prepare_tailoring.*coverLetter=true/, "must carry the default into the tailoring brief");
 }, { timeout: 30_000 });
 
 test("tailor_multiple_jobs: opting out instructs against passing coverLetter for every job", async () => {
@@ -48,5 +50,7 @@ test("tailor_multiple_jobs: a source location is sufficient and is read before p
   assert.match(text, /Read the job-posting source at `\/tmp\/jobs\.txt` before doing anything else/);
   assert.match(text, /Infer company, position, and URL from each posting/);
   assert.match(text, /four relevant experience entries/);
+  assert.match(text, /three relevant projects/);
+  assert.match(text, /normally 21 bullets/);
   assert.match(text, /standard professional font scale/);
 });

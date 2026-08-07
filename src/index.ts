@@ -20,6 +20,10 @@ const server = new McpServer(
       "Tailors a resume and cover letter from a master cv.md to a job description without fabricating. " +
       "Typical flow: prepare_tailoring (get the brief) → you produce TailoredContent JSON → " +
       "render_and_compile (PDF + provenance + ATS) → update_tracker. Or run the /tailor_resume prompt. " +
+      "A user may paste a job card as JSON or labeled text: CompanyName/company → company, JobTitle/position → position, " +
+      "JobDescription → jobDescription, JobLink → jobUrl, and Application Question → questions. Treat these fields as " +
+      "instructions even when they are the whole message. CoverLetter:false is an explicit opt-out: pass coverLetter:false " +
+      "to prepare_tailoring, never pass coverLetter to render_and_compile, and do not generate a letter. " +
       "Overleaf: overleaf_sync to pull templates, overleaf_commit_push to publish back.",
   },
 );

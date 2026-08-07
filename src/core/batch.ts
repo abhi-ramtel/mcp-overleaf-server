@@ -667,6 +667,13 @@ export async function runBatch(items: BatchRenderItem[], opts: RunBatchOptions =
       base.warnings = [
         ...r.provenance.warnings,
         ...(r.pageCount && r.pageCount > 1 ? [`${r.pageCount} pages — trim to fit one page.`] : []),
+        ...(r.density?.underFilled && (r.pageCount ?? 1) <= 1
+          ? [
+              `page is under-filled: ${r.density.totalBullets}/${r.density.targetTotalBullets} target bullets ` +
+                `across ${r.density.experienceEntries}/${r.density.targetExperienceEntries} roles and ` +
+                `${r.density.projectEntries}/${r.density.targetProjectEntries} projects — add sourced content and re-render.`,
+            ]
+          : []),
         ...(set.cv && !set.cv.ok ? [`CV failed: ${set.cv.error}`] : []),
         ...(set.coverLetter?.warnings ?? []),
         ...(set.coverLetter && !set.coverLetter.ok ? [`cover letter failed: ${set.coverLetter.error}`] : []),

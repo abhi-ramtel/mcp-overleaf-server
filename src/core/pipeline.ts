@@ -128,7 +128,13 @@ export interface RenderOutput {
     experienceEntries: number;
     projectEntries: number;
     totalBullets: number;
-    /** Entries carrying fewer bullets than the target (3 per role, 2 per project). */
+    /** Master-CV-aware targets for a full one-page résumé. */
+    targetExperienceEntries: number;
+    targetProjectEntries: number;
+    targetBulletsPerRole: number;
+    targetBulletsPerProject: number;
+    targetTotalBullets: number;
+    /** Entries or sections carrying less content than the master CV can support. */
     thinEntries: string[];
     underFilled: boolean;
   };
@@ -137,24 +143,55 @@ export interface RenderOutput {
 
 /** Target bullet counts — a one-page résumé should be full, not half empty. */
 const TARGET_BULLETS_PER_ROLE = 3;
-const TARGET_BULLETS_PER_PROJECT = 2;
-/** Below this many total bullets a standard one-page layout will visibly under-fill. */
-const MIN_TOTAL_BULLETS = 16;
+const TARGET_BULLETS_PER_PROJECT = 3;
+const TARGET_EXPERIENCE_ENTRIES = 4;
+const TARGET_PROJECT_ENTRIES = 3;
 
-function measureDensity(content: TailoredContent): NonNullable<RenderOutput["density"]> {
+/**
+ * Measure a tailored résumé against what the master CV can support. A fixed
+ * global bullet minimum missed the common 3-role/2-project cut: it has 15
+ * bullets, yet still leaves a large blank lower third. The baseline is instead
+ * four roles and three projects, with up to three sourced bullets in each.
+ */
+export function measureDensity(content: TailoredContent, master: MasterCv): NonNullable<RenderOutput["density"]> {
   const thinEntries: string[] = [];
   let totalBullets = 0;
+  const targetExperienceEntries = Math.min(TARGET_EXPERIENCE_ENTRIES, master.experience.length);
+  const targetProjectEntries = Math.min(TARGET_PROJECT_ENTRIES, master.projects.length);
+  const experienceById = new Map(master.experience.map((entry) => [entry.id, entry]));
+  const projectsById = new Map(master.projects.map((entry) => [entry.id, entry]));
+
+  const targetBulletTotal = (counts: number[], entries: number, perEntry: number): number =>
+    counts
+      .map((count) => Math.min(perEntry, count))
+      .sort((a, b) => b - a)
+      .slice(0, entries)
+      .reduce((total, count) => total + count, 0);
+  const targetTotalBullets =
+    targetBulletTotal(master.experience.map((entry) => entry.bullets.length), targetExperienceEntries, TARGET_BULLETS_PER_ROLE) +
+    targetBulletTotal(master.projects.map((entry) => entry.bullets.length), targetProjectEntries, TARGET_BULLETS_PER_PROJECT);
+
+  if (content.experience.length < targetExperienceEntries) {
+    thinEntries.push(`Experience section (${content.experience.length}/${targetExperienceEntries} role entries)`);
+  }
+  if (content.projects.length < targetProjectEntries) {
+    thinEntries.push(`Projects section (${content.projects.length}/${targetProjectEntries} project entries)`);
+  }
 
   for (const e of content.experience) {
     totalBullets += e.bullets.length;
-    if (e.bullets.length < TARGET_BULLETS_PER_ROLE) {
-      thinEntries.push(`${e.organization} (${e.bullets.length}/${TARGET_BULLETS_PER_ROLE} bullets)`);
+    const source = experienceById.get(e.sourceId);
+    const target = Math.min(TARGET_BULLETS_PER_ROLE, source?.bullets.length ?? TARGET_BULLETS_PER_ROLE);
+    if (e.bullets.length < target) {
+      thinEntries.push(`${e.organization} (${e.bullets.length}/${target} bullets)`);
     }
   }
   for (const p of content.projects) {
     totalBullets += p.bullets.length;
-    if (p.bullets.length < TARGET_BULLETS_PER_PROJECT) {
-      thinEntries.push(`${p.name} (${p.bullets.length}/${TARGET_BULLETS_PER_PROJECT} bullets)`);
+    const source = projectsById.get(p.sourceId);
+    const target = Math.min(TARGET_BULLETS_PER_PROJECT, source?.bullets.length ?? TARGET_BULLETS_PER_PROJECT);
+    if (p.bullets.length < target) {
+      thinEntries.push(`${p.name} (${p.bullets.length}/${target} bullets)`);
     }
   }
 
@@ -162,8 +199,13 @@ function measureDensity(content: TailoredContent): NonNullable<RenderOutput["den
     experienceEntries: content.experience.length,
     projectEntries: content.projects.length,
     totalBullets,
+    targetExperienceEntries,
+    targetProjectEntries,
+    targetBulletsPerRole: TARGET_BULLETS_PER_ROLE,
+    targetBulletsPerProject: TARGET_BULLETS_PER_PROJECT,
+    targetTotalBullets,
     thinEntries,
-    underFilled: totalBullets < MIN_TOTAL_BULLETS || thinEntries.length > 0,
+    underFilled: totalBullets < targetTotalBullets || thinEntries.length > 0,
   };
 }
 
@@ -242,7 +284,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
   await writeFile(texPath, tex, "utf-8");
 
   const out: RenderOutput = { ok: true, outputBase: base, templateSource, texPath, provenance, validation };
-  out.density = measureDensity(content);
+  out.density = measureDensity(content, master);
 
   if (input.compile !== false) {
     const pdfPath = join(config.outputDir, `${base}.pdf`);

@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { config } from "./config.js";
 import { loadMasterCv, runRenderPipeline, renderApplicationSet, latexToText } from "./core/pipeline.js";
+import type { RenderOutput } from "./core/pipeline.js";
 import { buildTailoringBrief, masterCvForBrief } from "./core/brief.js";
 import { TailoredContentSchema, CoverLetterContentSchema } from "./core/schema.js";
 import { runCoverLetterPipeline } from "./core/coverLetter.js";
@@ -27,6 +28,17 @@ type ToolResult = {
 };
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
+
+function densityWarning(density: NonNullable<RenderOutput["density"]>): string[] {
+  return [
+    `⚠️  PAGE IS UNDER-FILLED — ${density.totalBullets} bullets across ${density.experienceEntries} roles and ` +
+      `${density.projectEntries} projects. This leaves visible whitespace at the bottom.`,
+    `    Target from your master CV: ${density.targetExperienceEntries} roles × ${density.targetBulletsPerRole} bullets and ` +
+      `${density.targetProjectEntries} projects × ${density.targetBulletsPerProject} bullets (up to ${density.targetTotalBullets} bullets).`,
+    ...(density.thinEntries.length ? [`    Thin: ${density.thinEntries.join(", ")}`] : []),
+    "    Add relevant, sourced entries or bullets from the master CV and call this tool again. Only trim after a PDF is actually over one page.",
+  ];
+}
 
 async function guard(fn: () => Promise<ToolResult>): Promise<ToolResult> {
   try {
@@ -122,13 +134,17 @@ export function registerTools(server: McpServer): void {
         position: z.string().optional(),
         jobUrl: z.string().optional(),
         template: z.enum(["resume", "cv"]).optional().describe("Which document to produce (default resume)"),
+        coverLetter: z
+          .boolean()
+          .optional()
+          .describe("Whether to produce a matching cover letter (default true). Pass false for a user field such as CoverLetter:false."),
         questions: z
           .array(z.string())
           .optional()
           .describe("Application-portal questions to answer in chat (e.g. 'Why this company?')"),
       },
     },
-    async ({ jobDescription, company, position, jobUrl, template, questions }) =>
+    async ({ jobDescription, company, position, jobUrl, template, coverLetter, questions }) =>
       guard(async () => {
         // An empty/stub JD silently produces zero keywords, no ATS signal, and
         // nothing for a cover letter to reference — fail loudly instead.
@@ -149,6 +165,7 @@ export function registerTools(server: McpServer): void {
           position,
           jobUrl,
           template,
+          coverLetter,
           questions,
         });
         return ok(brief);
@@ -163,11 +180,13 @@ export function registerTools(server: McpServer): void {
       description:
         "Produce the application in one call: résumé + cover letter, compiled to PDF and logged to the " +
         "tracker as a single row. Every bullet is verified against the master CV (anti-fabrication) before " +
-        "anything compiles. Always pass `coverLetter` unless the user opted out. " +
+        "anything compiles. Always pass `coverLetter` unless the user opted out; a user field such as " +
+        "`CoverLetter: false` is an explicit opt-out, so do not pass it in that case. " +
         "A separate CV is NOT generated unless you pass alsoCv:true and configure your own CV template. " +
-        "Aim for 3 bullets per experience entry, four relevant entries when available, and 3 sourced bullets " +
-        "for the most relevant projects so the page fills naturally; preserve master-CV skill labels and the " +
-        "template's standard professional typography. The response warns when the page is under-filled. " +
+        "Start with four relevant experience entries and three relevant projects when available, using 3 sourced " +
+        "bullets for each selected entry that has enough source evidence (normally 21 bullets). Only trim after " +
+        "the actual PDF exceeds one page; preserve master-CV skill labels and the template's standard professional " +
+        "typography. The response warns when the page is under-filled. " +
         "Returns provenance warnings and an ATS coverage report.",
       inputSchema: {
         content: TailoredContentSchema.describe("The tailored content JSON produced from the brief"),
@@ -234,6 +253,9 @@ export function registerTools(server: McpServer): void {
           if (r.provenance.warnings.length) {
             single.push("", "Provenance warnings:", ...r.provenance.warnings.map((w) => `  • ${w}`));
           }
+          if (r.density?.underFilled && (r.pageCount ?? 1) <= 1) {
+            single.push("", ...densityWarning(r.density));
+          }
           if (r.tracked) single.push(`📋 ${r.tracked.created ? "Logged" : "Updated"} in the tracker.`);
           return ok(single.join("\n"));
         }
@@ -260,15 +282,7 @@ export function registerTools(server: McpServer): void {
 
         // Under-filling a single page is the more common failure than overflow.
         if (r.density && r.density.underFilled && (r.pageCount ?? 1) <= 1) {
-          lines.push(
-            "",
-            `⚠️  PAGE IS UNDER-FILLED — ${r.density.totalBullets} bullets across ` +
-              `${r.density.experienceEntries} roles and ${r.density.projectEntries} projects. ` +
-              "This leaves visible whitespace at the bottom.",
-            "    Target: 3 bullets per experience entry, 2+ per project.",
-            ...(r.density.thinEntries.length ? [`    Thin: ${r.density.thinEntries.join(", ")}`] : []),
-            "    Add bullets (or another project) from the master CV and call this tool again.",
-          );
+          lines.push("", ...densityWarning(r.density));
         }
 
         if (set.cv?.ok) {

@@ -16,6 +16,8 @@ export interface BriefOptions {
   position?: string;
   jobUrl?: string;
   template?: "resume" | "cv";
+  /** Whether to generate a matching cover letter (default true). */
+  coverLetter?: boolean;
   /** Application-portal questions to answer in chat (not in any document). */
   questions?: string[];
 }
@@ -84,11 +86,15 @@ ending two-thirds down the page wastes the most valuable space you have.
 - Prefer **four relevant experience entries** when the master CV has them — this
   is one more than the usual bare-minimum three. Do not add an entry that is not
   in the master CV just to reach four.
-- **At least TWO bullets for every project.** Give the two or three projects most
-  relevant to the role **THREE** sourced bullets so the project section provides
-  concrete, role-specific evidence.
-- Include roughly **4 experiences and 3-4 projects**, then adjust only when the
-  actual render proves the page cannot fit.
+- Start with **four experience entries and three projects** when the master CV
+  supplies them. This is the default content baseline, not an optional maximum.
+- Give **THREE distinct sourced bullets to every selected project** when that
+  project has three source bullets. If it has fewer, use every available source
+  bullet; never duplicate or invent one just to hit the count.
+- With four roles and three projects, the normal target is **21 bullets**
+  (4 × 3 experience + 3 × 3 project). Do not cut below this just because the
+  résumé seems likely to fit. Only remove content after the actual PDF reports
+  more than one page.
 - Bullets should be substantial: a full line or two of real detail, not four words.
 - Only trim if the render actually reports more than one page. Under-filling is
   the more common failure, and it looks worse than a dense page.`;
@@ -103,8 +109,10 @@ const PRESENTATION_GUIDANCE = `## Presentation and skills fidelity
   do not invent category labels or job-description-derived skills. This avoids
   provenance warnings and keeps the skills section clean and readable.
 - Prefer a focused, balanced layout: a concise 2-3 line summary, four strong
-  experience entries when available, and projects that prove the role's actual
-  technical requirements. Do not fill space with keyword lists or weak bullets.`;
+  experience entries and three substantial projects when available. Keep that
+  evidence in the first render; do not prune a relevant role or project merely
+  because it is less central than the top match. Do not fill space with keyword
+  lists or weak bullets.`;
 
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 
@@ -153,13 +161,18 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
   const gap = keywordGap(keywords, "", opts.masterCvText); // resume text empty → all keywords classified
   const target = opts.template === "cv" ? "one-page CV" : "one-page resume";
 
+  const coverLetterInstruction =
+    opts.coverLetter === false
+      ? " The user explicitly set CoverLetter:false. Do NOT pass `coverLetter` to `render_and_compile` and do not generate a cover letter."
+      : " Also pass a CV-grounded `coverLetter` unless the user explicitly opts out; this produces the matching letter in the same call.";
   const nextStep =
     "Produce the TailoredContent JSON, then call `render_and_compile` with it, passing " +
     `template="${opts.template ?? "resume"}"` +
     (opts.company ? `, company="${opts.company}"` : "") +
     (opts.position ? `, position="${opts.position}"` : "") +
     ", and the original jobDescription (for an ATS coverage report). " +
-    "Review any provenance warnings it returns before finalizing.";
+    "Review any provenance warnings it returns before finalizing." +
+    coverLetterInstruction;
 
   const sections: string[] = [
     `# Tailoring brief — produce a tailored ${target}`,
