@@ -42,8 +42,17 @@ export interface CompileResult {
   pdfPath?: string;
   pageCount?: number;
   sizeBytes?: number;
+  /** Measured from the PDF text bounds when Poppler's pdftotext is available. */
+  pageUsage?: PdfPageUsage;
   /** First actionable LaTeX error(s) when compilation fails. */
   error?: string;
+}
+
+/** Text bounds on the final PDF page, in PostScript points (72 pt = 1 inch). */
+export interface PdfPageUsage {
+  pageHeightPoints: number;
+  contentBottomYPoints: number;
+  bottomWhitespacePoints: number;
 }
 
 const LATEXMK_MODE: Record<LatexEngine, string> = {
@@ -82,6 +91,47 @@ function parsePageCount(text: string): number | undefined {
   if (m) return Number(m[1]);
   const m2 = text.replace(/\s+/g, " ").match(/Output written on [^(]+\((\d+)\s+pages?/);
   return m2 ? Number(m2[1]) : undefined;
+}
+
+/**
+ * Parse Poppler's `pdftotext -bbox` XHTML without taking a runtime dependency
+ * on a PDF library. The final page is the meaningful one for a one-page
+ * résumé: its lowest text reveals whether the visible lower third is empty.
+ */
+export function parsePdfPageUsage(xhtml: string): PdfPageUsage | undefined {
+  const pages = [...xhtml.matchAll(/<page\b([^>]*)>([\s\S]*?)<\/page>/g)];
+  const page = pages.at(-1);
+  if (!page) return undefined;
+
+  const heightMatch = page[1]?.match(/\bheight="([0-9.]+)"/);
+  const pageHeightPoints = Number(heightMatch?.[1]);
+  if (!Number.isFinite(pageHeightPoints) || pageHeightPoints <= 0) return undefined;
+
+  let contentBottomYPoints = 0;
+  for (const word of page[2]?.matchAll(/\byMax="([0-9.]+)"/g) ?? []) {
+    const yMax = Number(word[1]);
+    if (Number.isFinite(yMax)) contentBottomYPoints = Math.max(contentBottomYPoints, yMax);
+  }
+  if (contentBottomYPoints <= 0) return undefined;
+
+  return {
+    pageHeightPoints,
+    contentBottomYPoints,
+    bottomWhitespacePoints: Math.max(0, pageHeightPoints - contentBottomYPoints),
+  };
+}
+
+/** Best-effort visual-layout measurement. Rendering still works without Poppler. */
+async function inspectPdfPageUsage(pdfPath: string): Promise<PdfPageUsage | undefined> {
+  try {
+    const { stdout } = await execFileAsync("pdftotext", ["-bbox", pdfPath, "-"], {
+      timeout: 15_000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    return parsePdfPageUsage(stdout ?? "");
+  } catch {
+    return undefined;
+  }
 }
 
 export async function compileTex(texPath: string, opts: CompileOptions = {}): Promise<CompileResult> {
@@ -164,11 +214,14 @@ export async function compileTex(texPath: string, opts: CompileOptions = {}): Pr
     }
   }
 
+  const pageUsage = await inspectPdfPageUsage(pdfPath);
+
   if (!opts.keepAux) await cleanup(texDir, texBase);
 
   const result: CompileResult = { compiled: true, engine: usedEngine, pdfPath };
   if (pageCount !== undefined) result.pageCount = pageCount;
   if (sizeBytes !== undefined) result.sizeBytes = sizeBytes;
+  if (pageUsage !== undefined) result.pageUsage = pageUsage;
   return result;
 }
 

@@ -64,7 +64,8 @@ export function registerPrompts(server: McpServer): void {
           "top-level skill category labels and skill items close to the master CV; do not create new labels or " +
           "JD-derived skills. Preserve the template's standard professional type scale and margins — add useful " +
           "evidence instead of shrinking the design. Only trim after the actual render reports 2+ pages; if it " +
-          "reports PAGE IS UNDER-FILLED, add sourced content and render again.",
+          "reports PAGE IS UNDER-FILLED or excess lower-page whitespace, add sourced detail or another relevant " +
+          "entry and render again. Match the compactness of my existing template, not merely a one-page count.",
         `${n++}. Call \`render_and_compile\` ONCE with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, and the same jobDescription (for ATS coverage).` +
           (wantLetter
             ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
@@ -180,7 +181,8 @@ export function registerPrompts(server: McpServer): void {
           "is not the single best match. Keep top-level skill category labels and items close to the master CV, " +
           "never inventing JD-derived labels or skills. Preserve the template's standard professional font scale, " +
           "margins, and visual design; improve density with meaningful evidence, not compressed type. Only trim " +
-          "after a render reports more than one page; revise any PAGE IS UNDER-FILLED result before moving on.",
+          "after a render reports more than one page; revise any PAGE IS UNDER-FILLED or excess lower-page " +
+          "whitespace result before moving on.",
         "4. Call `batch_render` ONCE PER CHUNK, in the plan's order, waiting for each call to return before " +
           "starting the next. Never merge chunks into one call. In each call pass `content` for that chunk's " +
           "GENERATE jobs and `reuseFrom` exactly as the plan printed it for the rest (an index inside that same " +

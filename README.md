@@ -134,7 +134,7 @@ The two prompts (`tailor_resume`, `tailor_multiple_jobs`) surface differently de
 After connecting the server and restarting Codex, paste the following into Codex and replace the bracketed fields. Codex will use the connected `overleaf-resume` tools to do the work:
 
 ```text
-Please tailor my résumé for the job below and create a matching cover letter.
+Please tailor my résumé for the job below and create a matching cover letter when asked i.e. the coverletter flag is set to true.
 
 Use my master cv.md and my existing LaTeX template. First read the tailoring brief,
 then select, reorder, and rewrite only accomplishments that are supported by my CV.
@@ -144,7 +144,8 @@ three distinct sourced bullets for every selected entry that has that much evide
 Do not cut this baseline merely because it appears likely to fit on one page. Preserve
 the template's design, and only shorten content after the compiled PDF is actually over
 one page. If it reports that the page is under-filled, add more relevant sourced content
-and compile it again.
+and compile it again. The final text should reach close to the bottom of the page, like
+my existing template; do not leave a large empty lower third.
 
 Compile the résumé and cover letter to PDF, save them with the company and role in the
 filename, and log this application in the tracker. Before you finish, tell me the PDF

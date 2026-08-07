@@ -96,6 +96,12 @@ ending two-thirds down the page wastes the most valuable space you have.
   résumé seems likely to fit. Only remove content after the actual PDF reports
   more than one page.
 - Bullets should be substantial: a full line or two of real detail, not four words.
+- Match the compactness of the existing LaTeX template, not merely its page
+  count. A one-page PDF with a large empty lower third is under-filled. Retain
+  useful source detail so selected bullets naturally wrap where warranted; do
+  not make them terse simply to fit. If the rendered PDF still has substantial
+  lower-page whitespace, add a relevant sourced project or another detailed
+  sourced bullet before considering a layout change.
 - Only trim if the render actually reports more than one page. Under-filling is
   the more common failure, and it looks worse than a dense page.`;
 

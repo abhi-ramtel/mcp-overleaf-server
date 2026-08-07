@@ -52,5 +52,6 @@ test("tailor_multiple_jobs: a source location is sufficient and is read before p
   assert.match(text, /four relevant experience entries/);
   assert.match(text, /three relevant projects/);
   assert.match(text, /normally 21 bullets/);
+  assert.match(text, /excess lower-page whitespace/);
   assert.match(text, /standard professional font scale/);
 });

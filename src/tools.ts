@@ -29,15 +29,28 @@ type ToolResult = {
 const ok = (text: string): ToolResult => ({ content: [{ type: "text", text }] });
 const fail = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
 
-function densityWarning(density: NonNullable<RenderOutput["density"]>): string[] {
+function densityWarning(
+  density: NonNullable<RenderOutput["density"]>,
+  pageUsage?: RenderOutput["pageUsage"],
+): string[] {
   return [
     `⚠️  PAGE IS UNDER-FILLED — ${density.totalBullets} bullets across ${density.experienceEntries} roles and ` +
       `${density.projectEntries} projects. This leaves visible whitespace at the bottom.`,
     `    Target from your master CV: ${density.targetExperienceEntries} roles × ${density.targetBulletsPerRole} bullets and ` +
       `${density.targetProjectEntries} projects × ${density.targetBulletsPerProject} bullets (up to ${density.targetTotalBullets} bullets).`,
+    ...(pageUsage?.underFilled
+      ? [
+          `    Visual check: the final text ends ${Math.round(pageUsage.bottomWhitespacePoints)} pt from the page bottom; ` +
+            `target no more than ${pageUsage.targetBottomWhitespacePoints} pt of whitespace.`,
+        ]
+      : []),
     ...(density.thinEntries.length ? [`    Thin: ${density.thinEntries.join(", ")}`] : []),
-    "    Add relevant, sourced entries or bullets from the master CV and call this tool again. Only trim after a PDF is actually over one page.",
+    "    Restore useful source detail first, then add a relevant sourced entry or bullet from the master CV and call this tool again. Only trim after a PDF is actually over one page.",
   ];
+}
+
+function isUnderFilled(render: RenderOutput): boolean {
+  return Boolean(render.density?.underFilled || render.pageUsage?.underFilled);
 }
 
 async function guard(fn: () => Promise<ToolResult>): Promise<ToolResult> {
@@ -253,8 +266,8 @@ export function registerTools(server: McpServer): void {
           if (r.provenance.warnings.length) {
             single.push("", "Provenance warnings:", ...r.provenance.warnings.map((w) => `  • ${w}`));
           }
-          if (r.density?.underFilled && (r.pageCount ?? 1) <= 1) {
-            single.push("", ...densityWarning(r.density));
+          if (r.density && isUnderFilled(r) && (r.pageCount ?? 1) <= 1) {
+            single.push("", ...densityWarning(r.density, r.pageUsage));
           }
           if (r.tracked) single.push(`📋 ${r.tracked.created ? "Logged" : "Updated"} in the tracker.`);
           return ok(single.join("\n"));
@@ -281,8 +294,8 @@ export function registerTools(server: McpServer): void {
         if (r.pageCount && r.pageCount > 1) lines.push(`⚠️  Résumé is ${r.pageCount} pages — trim to fit one page.`);
 
         // Under-filling a single page is the more common failure than overflow.
-        if (r.density && r.density.underFilled && (r.pageCount ?? 1) <= 1) {
-          lines.push("", ...densityWarning(r.density));
+        if (r.density && isUnderFilled(r) && (r.pageCount ?? 1) <= 1) {
+          lines.push("", ...densityWarning(r.density, r.pageUsage));
         }
 
         if (set.cv?.ok) {

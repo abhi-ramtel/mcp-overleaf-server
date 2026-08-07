@@ -138,6 +138,15 @@ export interface RenderOutput {
     thinEntries: string[];
     underFilled: boolean;
   };
+  /** Visual lower-page fill measured from the compiled PDF when available. */
+  pageUsage?: {
+    pageHeightPoints: number;
+    contentBottomYPoints: number;
+    bottomWhitespacePoints: number;
+    /** Largest acceptable visible whitespace below the final text. */
+    targetBottomWhitespacePoints: number;
+    underFilled: boolean;
+  };
   error?: string;
 }
 
@@ -146,6 +155,8 @@ const TARGET_BULLETS_PER_ROLE = 3;
 const TARGET_BULLETS_PER_PROJECT = 3;
 const TARGET_EXPERIENCE_ENTRIES = 4;
 const TARGET_PROJECT_ENTRIES = 3;
+/** About 0.58 in. The user's template reaches much closer, so this is conservative. */
+const MAX_BOTTOM_WHITESPACE_POINTS = 42;
 
 /**
  * Measure a tailored résumé against what the master CV can support. A fixed
@@ -297,6 +308,14 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     out.pdfPath = result.pdfPath;
     if (result.pageCount !== undefined) out.pageCount = result.pageCount;
     if (result.sizeBytes !== undefined) out.sizeKB = Math.round(result.sizeBytes / 102.4) / 10;
+    if (result.pageUsage !== undefined) {
+      out.pageUsage = {
+        ...result.pageUsage,
+        targetBottomWhitespacePoints: MAX_BOTTOM_WHITESPACE_POINTS,
+        underFilled:
+          result.pageCount === 1 && result.pageUsage.bottomWhitespacePoints > MAX_BOTTOM_WHITESPACE_POINTS,
+      };
+    }
   }
 
   // 6. ATS coverage (optional).
