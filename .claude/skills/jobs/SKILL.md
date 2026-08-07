@@ -17,7 +17,7 @@ as a form in the chat, then run the existing batch pipeline on what comes back.
 Skip any question you can already answer:
 
 - A number in `$ARGUMENTS` or in the user's message ("I have 3 jobs") → that's the count, skip step 1.
-- Job postings already pasted in this conversation, or attached as files → skip straight to step 3.
+- Job postings already pasted in this conversation, attached as files, or referenced by a readable local path/URL → skip straight to step 3. Read the source first; do not make the user paste it again.
 - `job.json` in the repo root filled in with real values → offer to use it instead of the form.
 
 Never ask for something the conversation already told you.
@@ -64,9 +64,14 @@ This is the credit-efficient path; don't write content per job blindly.
 1. `batch_plan` with the parsed list and the chosen template. It clusters similar
    roles and checks the cross-session cache, then names the indices needing fresh work.
 2. Write `TailoredContent` JSON **only** for the indices marked GENERATE. Cite a
-   `sourceId` for every bullet and entry. Fill the page: three bullets per experience
-   entry, two or more per project, ~3 experiences and ~3–4 projects. Only trim when a
-   render reports more than one page.
+   `sourceId` for every bullet and entry. Fill the page naturally: three bullets per
+   experience entry, four relevant experience entries when the master CV contains
+   them, and three sourced bullets for the two or three projects most relevant to the
+   role (at least two for every other project). Keep top-level skill category labels
+   and items close to the master CV; do not invent JD-derived labels or skills. Keep
+   the template's standard professional font scale, margins, and visual design — add
+   evidence instead of shrinking the page. Only trim when a render reports more than
+   one page.
 3. `batch_render` **once** with every job — `content` for the generated ones,
    `reuseFrom` for the rest. Include a `coverLetter` per job unless letters were
    opted out; reuse proof points across similar roles and vary the company-specific

@@ -57,9 +57,13 @@ export function registerPrompts(server: McpServer): void {
         `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite ` +
           "existing bullets to fit the job, weave in truthful JD keywords, and cite the sourceId for every " +
           "bullet and entry. Do NOT invent anything or add numbers not in the source. " +
-          "FILL THE PAGE: give every experience entry THREE bullets and every project at least TWO " +
-          "(three for the most relevant), aiming for ~3 experiences and ~3-4 projects. A one-page résumé " +
-          "with whitespace at the bottom is a wasted page — only trim if the render reports 2+ pages.",
+          "FILL THE PAGE NATURALLY: give every experience entry THREE bullets, include four relevant " +
+          "experience entries when my master CV has them, and give the two or three most relevant projects " +
+          "THREE sourced bullets (at least two for every other project). Keep top-level skill category labels " +
+          "and skill items close to the master CV; do not create new labels or JD-derived skills. Preserve the " +
+          "template's standard professional type scale and margins — add useful evidence instead of shrinking " +
+          "the design. A one-page résumé with whitespace at the bottom is a wasted page — only trim if the " +
+          "render reports 2+ pages.",
         `${n++}. Call \`render_and_compile\` ONCE with that content, template="${tpl}"${company ? `, company="${company}"` : ""}${position ? `, position="${position}"` : ""}${jobUrl ? `, jobUrl="${jobUrl}"` : ""}, and the same jobDescription (for ATS coverage).` +
           (wantLetter
             ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
@@ -123,34 +127,56 @@ export function registerPrompts(server: McpServer): void {
       argsSchema: {
         jobs: z
           .string()
+          .optional()
           .describe(
             'The jobs. Either JSON [{"company","position","jobDescription","jobUrl","questions"}] or blocks ' +
               'separated by a line of "---", each with "Company:", "Position:", optional "Question:" lines, ' +
               "then the job description.",
           ),
+        location: z
+          .string()
+          .optional()
+          .describe(
+            "Optional local file path, attachment, or URL containing the job postings. The host model reads it, " +
+              "infers job details, and follows the same batch workflow; use this when you only want to provide a location.",
+          ),
         template: z.string().optional().describe('"resume" (default) or "cv" when templates/cv.tex exists'),
         coverLetter: z.string().optional().describe('"false" to skip cover letters (default: one per job)'),
       },
     },
-    ({ jobs, template, coverLetter }) => {
+    ({ jobs, location, template, coverLetter }) => {
       const tpl = template === "cv" ? "cv" : "resume";
       // Default ON, matching the documented behaviour and the single-job prompt.
       const wantLetter = !/^(false|no|0)$/i.test(coverLetter ?? "");
+      const inlineJobs = jobs?.trim();
+      const sourceLocation = location?.trim();
 
       const text = [
         `Tailor my ${tpl} for each of the jobs below (max 10). Be economical: do NOT write content for every ` +
           "job independently — follow this exactly:",
         "",
-        `1. Parse the jobs into a list of { company, position, jobDescription, jobUrl, questions }. Blocks are ` +
-          'separated by "---"; lines beginning "Company:", "Position:", "Job URL:" and "Question:" are fields ' +
-          "(collect every Question line into the `questions` array), and the remaining text is the job " +
-          "description. Cap at 10; if more are given, use the first 10 and say so.",
+        sourceLocation
+          ? `0. Read the job-posting source at \`${sourceLocation}\` before doing anything else. It may be a local ` +
+            "file, attachment, or URL; use the client’s available file or web capability to read it. Do not ask me " +
+            "to copy its contents into chat. If it cannot be read, report the exact access problem and stop rather " +
+            "than guessing."
+          : "",
+        `1. Parse the source${inlineJobs ? " and the inline jobs below" : ""} into a list of { company, position, ` +
+          "jobDescription, jobUrl, questions }. Infer company, position, and URL from each posting when they are " +
+          "not explicitly labeled. For text blocks, a line of \"---\" separates jobs; lines beginning \"Company:\", " +
+          '"Position:", "Job URL:" and "Question:" are fields (collect every Question line into the `questions` ' +
+          "array), and the remaining text is the job description. Cap at 10; if more are given, use the first 10 " +
+          "and say so.",
         `2. Call \`batch_plan\` with that list and template="${tpl}". It deterministically clusters similar roles ` +
           "and checks the cache, then returns the exact indices that need fresh content.",
         "3. Write TailoredContent JSON ONLY for the indices it marks GENERATE. Do not write content for the " +
           "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry, and " +
-          "FILL THE PAGE: three bullets per experience entry, two or more per project, ~3 experiences and " +
-          "~3-4 projects. Only trim if a render reports more than one page.",
+          "FILL THE PAGE NATURALLY: three bullets per experience entry, four relevant experience entries when " +
+          "the master CV provides them, and three sourced bullets for the two or three most role-relevant " +
+          "projects (at least two per other project). Keep top-level skill category labels and items close to the " +
+          "master CV, never inventing JD-derived labels or skills. Preserve the template's standard professional " +
+          "font scale, margins, and visual design; improve density with meaningful evidence, not compressed type. " +
+          "Only trim if a render reports more than one page.",
         "4. Call `batch_render` ONCE with all jobs: pass `content` for the generated ones, and `reuseFrom` " +
           "(the index or cache key from the plan) for the rest. Every job is compiled and logged to the " +
           "tracker automatically — no separate update_tracker calls needed." +
@@ -166,9 +192,11 @@ export function registerPrompts(server: McpServer): void {
         "",
         "Reminder: truthfulness beats keyword matching. Only reorder/rewrite/shorten/merge/remove/emphasize " +
           "content that already exists in my master CV.",
-        "",
-        "--- JOBS ---",
-        jobs.trim(),
+        ...(sourceLocation ? ["", "--- JOB SOURCE LOCATION ---", sourceLocation] : []),
+        ...(inlineJobs ? ["", "--- INLINE JOBS ---", inlineJobs] : []),
+        ...(!sourceLocation && !inlineJobs
+          ? ["", "No jobs or location were supplied. Ask me for one before running the batch."]
+          : []),
       ]
         .filter(Boolean)
         .join("\n");

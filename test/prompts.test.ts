@@ -42,3 +42,11 @@ test("tailor_multiple_jobs: default instructs giving each job a coverLetter", as
   const text = await getPromptText("tailor_multiple_jobs", { jobs: `Company: H\nPosition: SE\n${JD}` });
   assert.match(text, /Also give each job a `coverLetter`/);
 }, { timeout: 30_000 });
+
+test("tailor_multiple_jobs: a source location is sufficient and is read before planning", async () => {
+  const text = await getPromptText("tailor_multiple_jobs", { location: "/tmp/jobs.txt" });
+  assert.match(text, /Read the job-posting source at `\/tmp\/jobs\.txt` before doing anything else/);
+  assert.match(text, /Infer company, position, and URL from each posting/);
+  assert.match(text, /four relevant experience entries/);
+  assert.match(text, /standard professional font scale/);
+});

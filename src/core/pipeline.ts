@@ -138,8 +138,8 @@ export interface RenderOutput {
 /** Target bullet counts — a one-page résumé should be full, not half empty. */
 const TARGET_BULLETS_PER_ROLE = 3;
 const TARGET_BULLETS_PER_PROJECT = 2;
-/** Below this many total bullets a single page will visibly under-fill. */
-const MIN_TOTAL_BULLETS = 12;
+/** Below this many total bullets a standard one-page layout will visibly under-fill. */
+const MIN_TOTAL_BULLETS = 16;
 
 function measureDensity(content: TailoredContent): NonNullable<RenderOutput["density"]> {
   const thinEntries: string[] = [];

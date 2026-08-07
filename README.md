@@ -179,6 +179,14 @@ Position: Backend Engineer
 <paste the full JD>
 ```
 
+Or pass only a `location` argument pointing to a readable local file, attachment, or URL. The host model reads it, infers missing company/role/URL fields, and then follows the same batch flow. This is useful for a saved jobs list:
+
+```text
+LOCATION: /absolute/path/to/jobs.txt
+```
+
+The batch prompt prioritizes polished, standard one-page layouts: it uses four relevant experience entries when the master CV has them, gives the most relevant projects fuller sourced evidence, and retains master-CV skill labels. It fills a page with content rather than shrinking the template's professional type scale or margins.
+
 **This is the credit-efficient path.** `batch_plan` clusters jobs by keyword similarity and checks a cross-session cache, then names exactly which jobs need fresh reasoning. Similar roles share one pass:
 
 ```

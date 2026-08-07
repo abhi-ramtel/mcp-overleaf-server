@@ -165,8 +165,10 @@ export function registerTools(server: McpServer): void {
         "tracker as a single row. Every bullet is verified against the master CV (anti-fabrication) before " +
         "anything compiles. Always pass `coverLetter` unless the user opted out. " +
         "A separate CV is NOT generated unless you pass alsoCv:true and configure your own CV template. " +
-        "Aim for 3 bullets per experience entry and 2+ per project so the page fills; the response warns " +
-        "when the page is under-filled. Returns provenance warnings and an ATS coverage report.",
+        "Aim for 3 bullets per experience entry, four relevant entries when available, and 3 sourced bullets " +
+        "for the most relevant projects so the page fills naturally; preserve master-CV skill labels and the " +
+        "template's standard professional typography. The response warns when the page is under-filled. " +
+        "Returns provenance warnings and an ATS coverage report.",
       inputSchema: {
         content: TailoredContentSchema.describe("The tailored content JSON produced from the brief"),
         cvContent: TailoredContentSchema.optional().describe(

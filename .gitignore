@@ -30,4 +30,5 @@ templates/main.tex
 templates/main.pdf
 templates/cv.tex
 templates/cover-letter.tex
-job.json
+job.txt
+job\ copy.txt

@@ -75,17 +75,36 @@ const ATS_GUIDANCE = `## ATS optimization
 - Lead bullets with strong action verbs; keep quantified impact that already exists.
 - Drop weak or irrelevant bullets; prioritize the most relevant experience/projects.
 
-## Page density — FILL the page
+## Page density and visual quality — FILL the page naturally
 
 The target is one page that is *full*, not one page that is half empty. A résumé
 ending two-thirds down the page wastes the most valuable space you have.
 
 - **THREE bullets for every experience entry.** Not one, not two — three.
-- **At least TWO bullets for every project.** Three for the most relevant ones.
-- Include roughly **3 experiences and 3-4 projects**, then adjust to fit.
+- Prefer **four relevant experience entries** when the master CV has them — this
+  is one more than the usual bare-minimum three. Do not add an entry that is not
+  in the master CV just to reach four.
+- **At least TWO bullets for every project.** Give the two or three projects most
+  relevant to the role **THREE** sourced bullets so the project section provides
+  concrete, role-specific evidence.
+- Include roughly **4 experiences and 3-4 projects**, then adjust only when the
+  actual render proves the page cannot fit.
 - Bullets should be substantial: a full line or two of real detail, not four words.
 - Only trim if the render actually reports more than one page. Under-filling is
   the more common failure, and it looks worse than a dense page.`;
+
+const PRESENTATION_GUIDANCE = `## Presentation and skills fidelity
+
+- Fill the page with truthful, relevant evidence — **never** by shrinking the
+  font, tightening margins, or changing the document's visual design. The
+  renderer preserves the résumé template's professional, standard type scale.
+- Keep the master CV's top-level skill category labels verbatim whenever they
+  are included. Select and reorder the existing skill items for relevance, but
+  do not invent category labels or job-description-derived skills. This avoids
+  provenance warnings and keeps the skills section clean and readable.
+- Prefer a focused, balanced layout: a concise 2-3 line summary, four strong
+  experience entries when available, and projects that prove the role's actual
+  technical requirements. Do not fill space with keyword lists or weak bullets.`;
 
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 
@@ -153,6 +172,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
   sections.push(
     RULES,
     ATS_GUIDANCE,
+    PRESENTATION_GUIDANCE,
     ["## Job description", "", "```", opts.jobDescription.trim(), "```"].join("\n"),
     [
       "## JD keyword signals (deterministic)",
