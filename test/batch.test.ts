@@ -5,6 +5,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   planBatch,
+  expandChunk,
+  formatPlan,
   similarity,
   roleSimilarity,
   runBatch,
@@ -303,3 +305,62 @@ test("a cached role is reused in a later batch with no reasoning pass", async ()
     await untrack(["Acme", "Backend Engineer"], ["Globex", "Backend Engineer"], ["Umbrella", "Backend Engineer"]);
   }
 }, { timeout: 120_000 });
+
+test("a plan handle rebuilds a chunk without the postings being sent again", async () => {
+  await clearCache();
+  const companies: [string, string][] = [
+    ["Handleco", "Backend Engineer"],
+    ["Handlex", "Backend Engineer"],
+    ["Handly", "Frontend Engineer"],
+  ];
+  await untrack(...companies);
+  const plan = await planBatch(
+    companies.map(([company, position], i) => ({
+      company,
+      position,
+      jobUrl: `https://jobs.example/${i}`,
+      jobDescription: [BACKEND_A, BACKEND_B, FRONTEND][i]!,
+      questions: i === 0 ? ["Why us?"] : undefined,
+    })),
+  );
+  assert.match(plan.planId, /^plan-[0-9a-f]{8}$/);
+  assert.ok(formatPlan(plan).includes(plan.planId), "the printed plan names the handle to call back with");
+
+  const content = masterToTailored(await loadMasterCv());
+  const items = await expandChunk(plan.planId, 1, [
+    { ref: 0, content },
+    { ref: 2, content },
+  ]);
+
+  assert.equal(items.length, 3, "the whole chunk comes back, not just the jobs we wrote for");
+  assert.deepEqual(
+    items.map((i) => [i.company, i.position]),
+    companies,
+  );
+  assert.equal(items[1]!.jobDescription, BACKEND_B, "the posting is restored from the plan, not re-sent");
+  assert.equal(items[1]!.jobUrl, "https://jobs.example/1");
+  assert.equal(items[1]!.reuseFrom, 0, "reuse wiring survives the round trip");
+  assert.equal(items[1]!.content, undefined, "a reuse job still needs no content");
+  assert.equal(items[0]!.content, content);
+});
+
+test("a plan handle rejects an unknown id, a stray ref, and a GENERATE job with no content", async () => {
+  await clearCache();
+  await untrack(["Refco", "Backend Engineer"], ["Refx", "Frontend Engineer"]);
+  const plan = await planBatch([
+    { company: "Refco", position: "Backend Engineer", jobDescription: BACKEND_A },
+    { company: "Refx", position: "Frontend Engineer", jobDescription: FRONTEND },
+  ]);
+  const content = masterToTailored(await loadMasterCv());
+
+  await assert.rejects(() => expandChunk("plan-deadbeef", 1, []), /Unknown planId/);
+  await assert.rejects(() => expandChunk(plan.planId, 9, []), /no chunk 9/);
+  await assert.rejects(
+    () => expandChunk(plan.planId, 1, [{ ref: 7, content }]),
+    /ref 7 is not in chunk 1/,
+  );
+  await assert.rejects(
+    () => expandChunk(plan.planId, 1, [{ ref: 0, content }]),
+    /No content for #1 \(Refx — Frontend Engineer\)/,
+  );
+});
