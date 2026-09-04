@@ -129,6 +129,23 @@ const PRESENTATION_GUIDANCE = `## Presentation and skills fidelity
   because it is less central than the top match. Do not fill space with keyword
   lists or weak bullets.`;
 
+const VOICE_GUIDANCE = `## Voice — the prose a person actually reads
+
+The summary, the cover letter, and any application-question answers are read by a
+human, not an ATS. Load the \`humane-writing\` skill if this session has it and run
+its pre-send checklist over each of them. Without it, at minimum: no em dashes
+unless the interruption is the point, no "not just X, it's Y" framing, no
+three-item lists, none of leverage / robust / seamless / passionate / proven track
+record / extensive experience, no "In today's ..." opener, and no closer a form
+letter could carry. Vary sentence length.
+
+Specificity is what replaces all that, and it comes from the master CV only: name
+a system, a number, or an artifact already recorded there. Never invent a figure
+to sound concrete — every number absent from the CV is flagged for review.
+
+Résumé bullets are exempt. They are provenance-locked rewrites of master-CV lines;
+write them to the rules above this section instead.`;
+
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 
 Send only what you decided. Anything the master CV already holds is filled in by
@@ -171,7 +188,8 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
   const coverLetterInstruction =
     opts.coverLetter === false
       ? " The user explicitly set CoverLetter:false. Do NOT pass `coverLetter` to `render_and_compile` and do not generate a cover letter."
-      : " Also pass a CV-grounded `coverLetter` unless the user explicitly opts out; this produces the matching letter in the same call.";
+      : " Also pass a CV-grounded `coverLetter` unless the user explicitly opts out, written to the Voice section " +
+        "above; this produces the matching letter in the same call.";
   const nextStep =
     "Produce the TailoredContent JSON, then call `render_and_compile` with it, passing " +
     `template="${opts.template ?? "resume"}"` +
@@ -193,6 +211,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
     RULES,
     ATS_GUIDANCE,
     PRESENTATION_GUIDANCE,
+    VOICE_GUIDANCE,
     ["## Job description", "", "```", opts.jobDescription.trim(), "```"].join("\n"),
     [
       "## JD keyword signals (deterministic)",
@@ -215,7 +234,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
         "The portal asks the following. Draft an answer for each, then show them in your reply so they can be",
         "pasted into the application. Rules:",
         "",
-        "- First person, 3-6 sentences, specific and plain — no corporate filler.",
+        "- First person, 3-6 sentences, specific and plain. Apply the Voice section above: a person reads these.",
         "- Ground every claim in the master CV above. Do not invent employers, projects, or figures.",
         "- Reference this company and role concretely, using details from the job description.",
         "- If a question asks about preferences, working style, or motivation, answer honestly from what the CV",

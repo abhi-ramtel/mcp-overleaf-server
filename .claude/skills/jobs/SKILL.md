@@ -2,7 +2,7 @@
 name: jobs
 description: Collect several job postings through an in-chat form, then tailor a résumé and cover letter for each one. Use when the user wants to apply to more than one job at once, mentions a batch of jobs, asks for a job entry form, or says something like "I have 4 jobs to apply to".
 argument-hint: "[number of jobs]"
-allowed-tools: mcp__visualize__read_me, mcp__visualize__show_widget, mcp__overleaf-resume__batch_plan, mcp__overleaf-resume__batch_render, mcp__overleaf-resume__get_master_cv, Read
+allowed-tools: mcp__visualize__read_me, mcp__visualize__show_widget, mcp__overleaf-resume__batch_plan, mcp__overleaf-resume__batch_render, mcp__overleaf-resume__get_master_cv, Read, Skill
 ---
 
 # Multi-job entry
@@ -77,7 +77,10 @@ This is the credit-efficient path; don't write content per job blindly.
    and items close to the master CV; do not invent JD-derived labels or skills. Keep
    the template's standard professional font scale, margins, and visual design — add
    evidence instead of shrinking the page. Only trim when a render reports more than
-   one page.
+   one page. The summary is prose a person reads: write it with the
+   [humane-writing](../humane-writing/SKILL.md) skill loaded, and run that skill's
+   pre-send checklist over it. Bullets are exempt — they stay provenance-locked
+   rewrites of master-CV lines.
 3. `batch_render` **once per chunk**, in the plan's order, waiting for each call to
    return before starting the next. Pass the plan's `planId`, the `chunk` number, and
    one entry per job carrying just its `ref` plus what you wrote — `content` for that
@@ -85,7 +88,9 @@ This is the credit-efficient path; don't write content per job blindly.
    text, template and reuse wiring are already in the plan; re-sending them is the
    single most expensive mistake in this flow. Include a `coverLetter` per job unless
    letters were opted out; reuse proof points across similar roles and vary the
-   company-specific opening. Compiling, logging, and caching happen inside each call.
+   company-specific opening. Every letter goes through the humane-writing checklist
+   before it is sent — a reader who has seen a thousand of these notices the pattern
+   before the content. Compiling, logging, and caching happen inside each call.
 
 **Never merge chunks into one call.** A long call is what times the server out, and
 that is the whole reason the plan hands back groups of three.
@@ -147,7 +152,9 @@ A short table: company, position, pages, ATS %, and generated / reused / skipped
 
 Then answer any application questions **in chat**, grouped under each company —
 first person, 3–6 sentences, grounded only in the master CV, concrete about that
-company and role. They never go into a document.
+company and role. Run them through the [humane-writing](../humane-writing/SKILL.md)
+checklist too; the same person reads them and the letter. They never go into a
+document.
 
 ## If the form can't render
 

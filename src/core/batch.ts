@@ -953,6 +953,10 @@ export function formatPlan(plan: BatchPlan): string {
 
   lines.push(
     "",
+    "Cover letters and question answers are read by a person, not an ATS: load the `humane-writing` skill if this",
+    "session has it and run its checklist over each one. Every specific detail — a system, a number, an artifact —",
+    "must already be in the master CV. Résumé bullets are exempt; they stay provenance-locked rewrites.",
+    "",
     `Write TailoredContent for the ${plan.reasoningPasses} GENERATE job(s) only` +
       (generateRefs ? `: ${generateRefs}` : "") +
       ". Every job produces a résumé and, when you pass `coverLetter`, a letter — both logged to the tracker.",
