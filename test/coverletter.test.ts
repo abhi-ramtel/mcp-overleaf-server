@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { runCoverLetterPipeline } from "../src/core/coverLetter.js";
@@ -44,6 +44,27 @@ test("checkCoverLetterClaims ignores numbers coming from the company/role", () =
 test("schema rejects a letter with too few paragraphs", () => {
   const r = CoverLetterContentSchema.safeParse({ company: "X", position: "Y", paragraphs: ["only one"] });
   assert.equal(r.success, false);
+});
+
+test("fills every placeholder and never duplicates the signature name", async () => {
+  const outputName = `test_cover_letter_fix_${process.pid}`;
+  const texPath = join(config.outputDir, `${outputName}.tex`);
+  try {
+    const r = await runCoverLetterPipeline({
+      content: { ...CONTENT, closing: "Sincerely,\nAbhi Ramtel" },
+      outputName,
+      compile: false,
+    });
+    assert.equal(r.ok, true, r.error);
+    const tex = await readFile(r.texPath ?? texPath, "utf-8");
+    assert.ok(!/\{\{[A-Z_\\]+\}\}/.test(tex), "no {{PLACEHOLDER}} left in the rendered .tex");
+    assert.ok(!tex.includes("CONTACT\\_LINE"), "no LaTeX-escaped placeholder variants either");
+    const occurrences = tex.split("Abhi Ramtel").length - 1;
+    assert.equal(occurrences, 2, "name appears only in the letterhead and the bold signature");
+    assert.ok(tex.includes("Sincerely,"), "closing text kept");
+  } finally {
+    await rm(texPath).catch(() => {});
+  }
 });
 
 test("renders and compiles a real one-page cover letter PDF", async () => {

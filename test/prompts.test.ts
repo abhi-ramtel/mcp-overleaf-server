@@ -9,7 +9,13 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const JD = "x".repeat(120);
 
 async function getPromptText(name: string, args: Record<string, string>): Promise<string> {
-  const transport = new StdioClientTransport({ command: "node", args: ["--import", "tsx", "src/index.ts"], cwd: ROOT });
+  // The spawned server gets the same sandboxed output dir as the suite — the
+  // stdio transport does not inherit arbitrary env vars, so preload it there too.
+  const transport = new StdioClientTransport({
+    command: "node",
+    args: ["--import", "tsx", "--import", "./test/setup.ts", "src/index.ts"],
+    cwd: ROOT,
+  });
   const client = new Client({ name: "prompts-test", version: "0.0.0" });
   try {
     await client.connect(transport);

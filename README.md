@@ -235,22 +235,29 @@ The batch prompt prioritizes polished, standard one-page layouts: it uses four r
 
 **This is the credit-efficient path.** `batch_plan` does three things before any content is written: it **skips jobs you've already done**, clusters the rest by keyword similarity (checking a cross-session cache), and **splits the remaining work into chunks of three** — one `batch_render` call each, so no single call can run long enough to time out. That's what lets a batch go past ten jobs.
 
+It also hands back a **`planId`**. The postings, templates and reuse wiring stay on disk behind that handle, so each `batch_render` call passes `planId`, a `chunk` number, and one entry per job carrying just its `ref` and whatever content was written for it — no job description is ever sent twice.
+
 ```
-Batch plan — 8 job(s): 5 to render in 2 call(s) of up to 3, 3 skipped. 3 reasoning pass(es) needed, 2 saved by reuse.
+Batch plan plan-7f3a91c2 — 8 job(s): 5 to render in 2 call(s) of up to 3, 3 skipped. 3 reasoning pass(es) needed, 2 saved by reuse.
 
 SKIPPED — no work needed, do not render these:
   ⏭  #5  Nuro — Software Engineer: same company+position as job #0 in this list.
   ⏭  #6  Stripe — Backend Engineer: job description is 8 chars — paste the full posting.
   ⏭  #7  (no company) — Backend Engineer: missing company — read it off the posting.
 
-── Chunk 1 of 2 — batch_render with these 3 job(s):
-   [0]  Nuro — Software Engineer     [resume]  →  GENERATE  ← write content for this one
-   [1]  Waymo — Backend Engineer     [resume]  →  reuseFrom: 0 (job [0] in this same call, similarity 0.78)
-   [2]  Figma — Frontend Engineer    [resume]  →  GENERATE  ← write content for this one
+  batch_render({ planId: "plan-7f3a91c2", chunk: 1, jobs: [
+    { ref: 0, content: { …TailoredContent… }, coverLetter: { …CoverLetterContent… } },
+    { ref: 1, coverLetter: { …CoverLetterContent… } }   // a reuse job: no content needed
+  ] })
 
-── Chunk 2 of 2 — batch_render with these 2 job(s):
-   [0]  Linear — Frontend Engineer   [resume]  →  reuseFrom: "figma|frontend engineer" (similarity 0.81)
-   [1]  OpenAI — ML Engineer         [resume]  →  GENERATE  ← write content for this one
+── Chunk 1 of 2:
+   ref 0  Nuro — Software Engineer     [resume]  →  GENERATE  ← write TailoredContent for this one
+   ref 1  Waymo — Backend Engineer     [resume]  →  reuse (similarity 0.78)
+   ref 2  Figma — Frontend Engineer    [resume]  →  GENERATE  ← write TailoredContent for this one
+
+── Chunk 2 of 2:
+   ref 3  Linear — Frontend Engineer   [resume]  →  reuse (similarity 0.81)
+   ref 4  OpenAI — ML Engineer         [resume]  →  GENERATE  ← write TailoredContent for this one
 ```
 
 Tune with `threshold` (0–1, default `0.6`) — raise it toward `0.9` to force fresh reasoning per job. `chunkSize` overrides the three-per-call default (max 10).
@@ -305,6 +312,7 @@ Read the tool's response before sending anything out. It reports **ATS coverage*
 | A job was skipped as "already generated" | It's in `applications.csv` with its PDF on disk. Pass `force: true`, or delete the row, to rebuild it |
 | A batch stalls or the client drops the call | Too many jobs in one `batch_render`. Follow `batch_plan`'s chunks — three per call |
 | "No cached content for key …" | The reuse cache was cleared between planning and rendering. Re-run `batch_plan` for the remaining jobs |
+| "Unknown planId …" | Plans expire after eight newer ones. Re-run `batch_plan` for what is left and use the new handle |
 | Overleaf sync says unavailable | Overleaf git access is a paid feature. Not an error; local templates are used instead |
 | Compile fails | Check `latexmk --version`; install MacTeX / TeX Live |
 
@@ -318,7 +326,7 @@ Read the tool's response before sending anything out. It reports **ATS coverage*
 | `render_and_compile` | Inject → validate → anti-fabrication check → compile → save `Company_Position.pdf`; **also renders the cover letter and auto-logs the application** |
 | `render_cover_letter` | Standalone one-page cover letter (usually unnecessary — pass `coverLetter` to `render_and_compile` instead) |
 | `batch_plan` | Up to 30 jobs: skips ones already done, clusters the rest, and chunks them 3 per render call |
-| `batch_render` | Renders, compiles, writes letters, and logs one chunk; skips jobs already in the tracker |
+| `batch_render` | Renders, compiles, writes letters, and logs one chunk (by `planId` + `chunk`); skips jobs already in the tracker |
 | `get_master_cv` | The parsed master CV with the ids used for tailoring |
 | `ats_report` | Keyword coverage vs. a JD; splits gaps into *addable* (in your CV) vs *absent* |
 | `update_tracker` / `list_applications` | Manual tracker access (logging is automatic) |

@@ -20,6 +20,31 @@ function todayLong(): string {
   return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
+/** Placeholder pattern — tolerates LaTeX-escaped underscores ({{A\_B}}) in templates. */
+const PLACEHOLDER = /\{\{([A-Z_]+(?:\\_[A-Z_]+)*)\}\}/g;
+
+/**
+ * Closing without the candidate's name: the template already prints
+ * \textbf{NAME} as the signature, so a closing like "Sincerely,\nJane Doe"
+ * would otherwise render the name twice.
+ */
+function normalizeClosing(raw: string | undefined, name: string): string {
+  const nameLc = name.trim().toLowerCase();
+  const kept = (raw?.trim() || "Sincerely,")
+    .split(/\r?\n|\\\\/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const lc = l.toLowerCase();
+      if (lc === nameLc) return ""; // line is just the name
+      if (lc.endsWith(nameLc)) return l.slice(0, l.length - nameLc.length).replace(/[,\s]+$/, "");
+      return l;
+    })
+    .filter(Boolean)
+    .map((l) => escapeLatex(l));
+  return kept.length > 0 ? kept.join("\\\\") : escapeLatex("Sincerely,");
+}
+
 /** Contact line under the name — phone / email / portfolio, matching the résumé. */
 function contactLine(cv: MasterCv): string {
   const parts: string[] = [];
@@ -108,13 +133,16 @@ export async function runCoverLetterPipeline(input: CoverLetterInput): Promise<C
     RECIPIENT_BLOCK: recipientBlock,
     GREETING: escapeLatex(greeting),
     BODY: body,
-    CLOSING: escapeLatex(content.closing?.trim() || "Sincerely,"),
+    CLOSING: normalizeClosing(content.closing, cv.contact.name),
   };
 
   const template = await resolveLetterTemplate(input.templateFile);
-  const tex = template.replace(/\{\{([A-Z_]+)\}\}/g, (m, k: string) => (k in values ? (values[k] ?? "") : m));
+  const tex = template.replace(PLACEHOLDER, (m, k: string) => {
+    const key = k.replace(/\\/g, "");
+    return key in values ? (values[key] ?? "") : m;
+  });
 
-  const leftover = tex.match(/\{\{[A-Z_]+\}\}/g);
+  const leftover = tex.match(PLACEHOLDER);
   if (leftover) {
     return { ok: false, outputBase: base, claims, error: `Unresolved placeholders: ${[...new Set(leftover)].join(", ")}` };
   }
