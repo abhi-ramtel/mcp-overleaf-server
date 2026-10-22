@@ -70,8 +70,9 @@ export function registerPrompts(server: McpServer): void {
           (wantLetter
             ? " In the SAME call also pass `coverLetter` with 3-4 tight paragraphs: why this company and role " +
               "specifically (use details from the posting), the strongest proof from my actual experience, and a " +
-              "brief close — drawn only from my master CV, no invented employers, projects, or figures. This " +
-              "produces the résumé and the matching letter together."
+              "brief close — drawn only from my master CV, no invented employers, projects, or figures. Load the " +
+              "`humane-writing` skill if you have it and run its checklist over the letter and the summary before " +
+              "sending: a person reads these, not an ATS. This produces the résumé and the matching letter together."
             : ""),
         `${n++}. That single call produces the résumé${wantLetter ? " and the cover letter" : ""} from my own ` +
           "templates/main.tex, and logs the application automatically — no separate update_tracker call, and " +
@@ -85,8 +86,8 @@ export function registerPrompts(server: McpServer): void {
         steps.push(
           `${n++}. Finally, answer the application questions IN CHAT (they do not go in any document). ` +
             "First person, 3-6 sentences each, grounded only in my master CV, referencing this company and " +
-            "role concretely. If a question can't be answered truthfully from my CV, say so and tell me what " +
-            "you'd need from me.",
+            "role concretely, and run the `humane-writing` skill's checklist over them if you have it. If a " +
+            "question can't be answered truthfully from my CV, say so and tell me what you'd need from me.",
         );
       }
       if (wantPush) {
@@ -190,7 +191,8 @@ export function registerPrompts(server: McpServer): void {
           "update_tracker calls needed." +
           (wantLetter
             ? " Also give each job a `coverLetter` in the same call so the letters are produced alongside the " +
-              "résumés; reuse the same proof points across similar roles and vary only the company-specific opening."
+              "résumés; reuse the same proof points across similar roles and vary only the company-specific " +
+              "opening. Load the `humane-writing` skill if you have it and run its checklist over every letter."
             : " Do NOT give any job a `coverLetter` — cover letters were opted out of for this batch."),
         "5. If a chunk reports a failure, fix and re-send just that job, then carry on with the next chunk — " +
           "anything already rendered is skipped automatically, so nothing gets duplicated or overwritten. " +
@@ -200,7 +202,8 @@ export function registerPrompts(server: McpServer): void {
           "than one page.",
         "7. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
           "heading. First person, 3-6 sentences each, grounded only in my master CV and referencing that " +
-          "company and role concretely. These do not go in any document.",
+          "company and role concretely, checked against the `humane-writing` skill if you have it. These do " +
+          "not go in any document.",
         "",
         "Reminder: truthfulness beats keyword matching. Only reorder/rewrite/shorten/merge/remove/emphasize " +
           "content that already exists in my master CV.",

@@ -33,3 +33,8 @@ templates/cv.tex
 templates/cover-letter.tex
 job.txt
 job\ copy.txt
+joblist.csv
+joblist.txt
+build_joblist.py
+job_history
+opencode.json

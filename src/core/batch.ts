@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { config } from "../config.js";
 import { extractKeywords } from "./keywords.js";
 import { listApplications } from "./tracker.js";
-import type { TailoredContent } from "./schema.js";
+import type { TailoredContentInput } from "./schema.js";
 
 /** Hard cap on jobs in a single `batch_render` call — keeps one call bounded. */
 export const MAX_BATCH_JOBS = 10;
@@ -57,7 +57,7 @@ export interface CacheEntry {
   fingerprint: string;
   keywords: string[];
   template: string;
-  content: TailoredContent;
+  content: TailoredContentInput;
   createdAt: string;
 }
 
@@ -127,7 +127,7 @@ export async function rememberTailoring(params: {
   position: string;
   keywords: string[];
   template: string;
-  content: TailoredContent;
+  content: TailoredContentInput;
 }): Promise<void> {
   const entries = await loadCache();
   const key = jobKey(params.company, params.position);
@@ -192,6 +192,141 @@ export async function completedApplications(): Promise<Map<string, CompletedAppl
   return done;
 }
 
+/* ── Plan store ─────────────────────────────────────────────────────────────
+ *
+ * A plan keeps each job's company, position, URL, template, posting text, and
+ * resolved reuse decision on disk under a short handle. `batch_render` then
+ * addresses a chunk by `planId` + `chunk` and the host model sends only the
+ * content it actually wrote — instead of re-typing every job description a
+ * second time, which is the largest avoidable output cost in a batch.
+ */
+
+/** How many recent plans stay resolvable. */
+const PLAN_STORE_LIMIT = 8;
+
+export interface StoredPlanJob {
+  /** Original index in the planned list — what `ref` addresses. */
+  index: number;
+  company: string;
+  position: string;
+  jobUrl?: string;
+  jobDescription: string;
+  template: string;
+  questions?: string[];
+  action: PlanAction;
+  reuseFrom?: number | string;
+  chunk: number;
+  chunkIndex: number;
+}
+
+export interface StoredPlan {
+  planId: string;
+  createdAt: string;
+  chunkSize: number;
+  chunkCount: number;
+  /** Renderable jobs only — skipped ones need no render call. */
+  jobs: StoredPlanJob[];
+}
+
+function plansPath(): string {
+  return join(config.outputDir, ".batch-plans.json");
+}
+
+async function loadPlans(): Promise<StoredPlan[]> {
+  try {
+    const raw = JSON.parse(await readFile(plansPath(), "utf-8"));
+    return Array.isArray(raw) ? (raw as StoredPlan[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function savePlan(plan: StoredPlan): Promise<void> {
+  const plans = await loadPlans();
+  await mkdir(config.outputDir, { recursive: true });
+  await writeFile(
+    plansPath(),
+    JSON.stringify([plan, ...plans.filter((p) => p.planId !== plan.planId)].slice(0, PLAN_STORE_LIMIT), null, 2),
+    "utf-8",
+  );
+}
+
+export async function loadPlan(planId: string): Promise<StoredPlan | null> {
+  const id = planId.trim();
+  return (await loadPlans()).find((p) => p.planId === id) ?? null;
+}
+
+/** What the host model supplies for one job of a planned chunk. */
+export interface ChunkContribution {
+  /** The job's `#index` as printed by the plan. */
+  ref: number;
+  content?: TailoredContentInput;
+  coverLetter?: unknown;
+  cvContent?: unknown;
+  summary?: string;
+  headerLine?: string;
+  alsoCv?: boolean;
+  force?: boolean;
+}
+
+/**
+ * Rebuild a chunk's full render items from the stored plan plus whatever the
+ * host wrote for it. Everything else — company, position, posting, template,
+ * reuse wiring — comes off the plan and never crosses the wire twice.
+ */
+export async function expandChunk(
+  planId: string,
+  chunk: number,
+  contributions: ChunkContribution[] = [],
+): Promise<BatchRenderItem[]> {
+  const plan = await loadPlan(planId);
+  if (!plan) {
+    throw new Error(
+      `Unknown planId "${planId}" — plans do not outlive ${PLAN_STORE_LIMIT} newer ones, and the store may have ` +
+        "been cleared. Re-run batch_plan for the remaining jobs, or send this chunk's jobs explicitly.",
+    );
+  }
+  const jobs = plan.jobs.filter((j) => j.chunk === chunk).sort((a, b) => a.chunkIndex - b.chunkIndex);
+  if (jobs.length === 0) {
+    throw new Error(`Plan "${planId}" has no chunk ${chunk} — it has chunks 1-${plan.chunkCount}.`);
+  }
+
+  const byRef = new Map(contributions.map((c) => [c.ref, c]));
+  const strays = contributions.map((c) => c.ref).filter((r) => !jobs.some((j) => j.index === r));
+  if (strays.length > 0) {
+    throw new Error(
+      `ref ${strays.join(", ")} is not in chunk ${chunk} of plan "${planId}" ` +
+        `(it holds #${jobs.map((j) => j.index).join(", #")}). Send each job in its own chunk's call.`,
+    );
+  }
+  const missing = jobs.filter((j) => j.action === "generate" && !byRef.get(j.index)?.content);
+  if (missing.length > 0) {
+    throw new Error(
+      `No content for ${missing.map((j) => `#${j.index} (${j.company} — ${j.position})`).join(", ")}. ` +
+        "The plan marked these GENERATE, so each needs its own TailoredContent.",
+    );
+  }
+
+  return jobs.map((j) => {
+    const c = byRef.get(j.index);
+    return {
+      company: j.company,
+      position: j.position,
+      jobUrl: j.jobUrl,
+      jobDescription: j.jobDescription,
+      template: j.template as "resume" | "cv",
+      reuseFrom: j.reuseFrom,
+      content: c?.content,
+      coverLetter: c?.coverLetter,
+      cvContent: c?.cvContent,
+      summary: c?.summary,
+      headerLine: c?.headerLine,
+      alsoCv: c?.alsoCv,
+      force: c?.force,
+    };
+  });
+}
+
 export interface BatchJobInput {
   company: string;
   position: string;
@@ -233,6 +368,8 @@ export interface PlannedJob {
 }
 
 export interface BatchPlan {
+  /** Handle `batch_render` uses to pull these jobs back off disk. */
+  planId: string;
   jobs: PlannedJob[];
   /** Jobs to render, grouped into one group per `batch_render` call. */
   chunks: PlannedJob[][];
@@ -429,7 +566,43 @@ export async function planBatch(jobs: BatchJobInput[], opts: PlanOptions = {}): 
     warnings.push("Nothing to render — every job was skipped. Nothing else to do.");
   }
 
+  // Store the jobs behind a handle so batch_render can address them by index
+  // instead of having the whole list re-sent, posting text and all.
+  const planId = `plan-${createHash("sha256")
+    .update(`${Date.now()}|${jobs.map((j) => `${j.company}|${j.position}`).join("|")}`)
+    .digest("hex")
+    .slice(0, 8)}`;
+  if (renderable.length > 0) {
+    try {
+      await savePlan({
+        planId,
+        createdAt: new Date().toISOString(),
+        chunkSize,
+        chunkCount: chunks.length,
+        jobs: renderable.map((j) => ({
+          index: j.index,
+          company: j.company,
+          position: j.position,
+          jobUrl: j.jobUrl,
+          jobDescription: (jobs[j.index]?.jobDescription ?? "").trim(),
+          template: j.template,
+          questions: j.questions,
+          action: j.action,
+          reuseFrom: j.reuseFrom,
+          chunk: j.chunk!,
+          chunkIndex: j.chunkIndex!,
+        })),
+      });
+    } catch {
+      warnings.push(
+        "Could not save the plan handle — send each chunk's jobs to batch_render explicitly (company, " +
+          "position, jobDescription, template, reuseFrom) instead of planId + ref.",
+      );
+    }
+  }
+
   return {
+    planId,
     jobs: planned,
     chunks,
     chunkSize,
@@ -445,7 +618,7 @@ export async function planBatch(jobs: BatchJobInput[], opts: PlanOptions = {}): 
 }
 
 /** Fetch cached content by key (used by batch_render for reuse-cache jobs). */
-export async function contentFromCache(key: string): Promise<TailoredContent | null> {
+export async function contentFromCache(key: string): Promise<TailoredContentInput | null> {
   const cache = await loadCache();
   return cache.find((e) => e.key === key.trim().toLowerCase())?.content ?? null;
 }
@@ -459,7 +632,7 @@ async function resolveFromCache(
   key: string,
   jobDescription?: string,
   threshold = DEFAULT_REUSE_THRESHOLD,
-): Promise<{ content: TailoredContent; note?: string } | null> {
+): Promise<{ content: TailoredContentInput; note?: string } | null> {
   const cache = await loadCache();
   const exact = cache.find((e) => e.key === key.trim().toLowerCase());
   if (exact) return { content: exact.content };
@@ -487,7 +660,7 @@ export interface BatchRenderItem {
   jobDescription?: string;
   template?: "resume" | "cv";
   /** Tailored content — required for jobs the plan marked "generate". */
-  content?: TailoredContent;
+  content?: TailoredContentInput;
   /** Batch index or cache key to copy content from (reuse jobs). */
   reuseFrom?: number | string;
   /** Optional role-specific summary override when reusing content. */
@@ -565,7 +738,7 @@ export async function runBatch(items: BatchRenderItem[], opts: RunBatchOptions =
    * themselves (rather than from what has rendered so far) means a reference
    * may point forward, and survives the referenced job failing to compile.
    */
-  const contentFrom = async (i: number, chain: Set<number>): Promise<TailoredContent> => {
+  const contentFrom = async (i: number, chain: Set<number>): Promise<TailoredContentInput> => {
     if (chain.has(i)) throw new Error(`reuseFrom loops back to job #${i} — break the cycle by supplying content.`);
     chain.add(i);
     const it = items[i];
@@ -620,7 +793,7 @@ export async function runBatch(items: BatchRenderItem[], opts: RunBatchOptions =
         continue;
       }
 
-      let content: TailoredContent | undefined = item.content;
+      let content: TailoredContentInput | undefined = item.content;
       if (!content && item.reuseFrom !== undefined) {
         base.source = "reused";
         if (typeof item.reuseFrom === "number") {
@@ -720,7 +893,7 @@ export async function runBatch(items: BatchRenderItem[], opts: RunBatchOptions =
 /** Human-readable plan summary for the model/user. */
 export function formatPlan(plan: BatchPlan): string {
   const lines: string[] = [
-    `Batch plan — ${plan.totalJobs} job(s): ${plan.plannedJobs} to render in ` +
+    `Batch plan ${plan.planId} — ${plan.totalJobs} job(s): ${plan.plannedJobs} to render in ` +
       `${plan.chunks.length} call(s) of up to ${plan.chunkSize}` +
       `${plan.skipped.length ? `, ${plan.skipped.length} skipped` : ""}. ` +
       `${plan.reasoningPasses} reasoning pass(es) needed` +
@@ -736,26 +909,33 @@ export function formatPlan(plan: BatchPlan): string {
 
   if (plan.chunks.length === 0) {
     lines.push("", "Nothing to render. Report the skipped jobs above and stop — do not call batch_render.");
-  } else {
-    lines.push(
-      "",
-      `Call \`batch_render\` ONCE PER CHUNK, in order, waiting for each call to return before starting the next.`,
-      "Never merge chunks into one call — that is what times the server out.",
-    );
-    for (const chunk of plan.chunks) {
-      lines.push("", `── Chunk ${chunk[0]!.chunk} of ${plan.chunks.length} — batch_render with these ${chunk.length} job(s):`);
-      for (const j of chunk) {
-        const tag =
-          j.action === "generate"
-            ? "GENERATE  ← you must write TailoredContent for this one"
-            : j.action === "reuse-batch"
-              ? typeof j.reuseFrom === "number"
-                ? `reuseFrom: ${j.reuseFrom} (job [${j.reuseFrom}] in this same call, similarity ${j.similarity})`
-                : `reuseFrom: "${j.reuseFrom}" (similarity ${j.similarity})`
-              : `reuseFrom: "${j.reuseFrom}" (cached role, similarity ${j.similarity})`;
-        lines.push(`   [${j.chunkIndex}]  ${j.company} — ${j.position}  [${j.template}]  →  ${tag}`);
-        if (j.note) lines.push(`        ↳ ${j.note}`);
-      }
+    return lines.join("\n");
+  }
+
+  const generateRefs = plan.needsGeneration.map((i) => `#${i}`).join(", ");
+  lines.push(
+    "",
+    "Call `batch_render` ONCE PER CHUNK, in order, waiting for each call to return before starting the next.",
+    "Never merge chunks into one call — that is what times the server out.",
+    "",
+    "Address each job by its `ref` below. Company, position, posting text, template and reuse wiring are",
+    "already in this plan — do not re-send them. Pass only what you wrote:",
+    "",
+    `  batch_render({ planId: "${plan.planId}", chunk: 1, jobs: [`,
+    "    { ref: 0, content: { …TailoredContent… }, coverLetter: { …CoverLetterContent… } },",
+    "    { ref: 1, coverLetter: { …CoverLetterContent… } }   // a reuse job: no content needed",
+    "  ] })",
+  );
+
+  for (const chunk of plan.chunks) {
+    lines.push("", `── Chunk ${chunk[0]!.chunk} of ${plan.chunks.length}:`);
+    for (const j of chunk) {
+      const tag =
+        j.action === "generate"
+          ? "GENERATE  ← write TailoredContent for this one"
+          : `reuse (similarity ${j.similarity})`;
+      lines.push(`   ref ${j.index}  ${j.company} — ${j.position}  [${j.template}]  →  ${tag}`);
+      if (j.note) lines.push(`        ↳ ${j.note}`);
     }
   }
 
@@ -763,27 +943,24 @@ export function formatPlan(plan: BatchPlan): string {
 
   const withQuestions = plan.jobs.filter((j) => j.action !== "skip" && (j.questions?.length ?? 0) > 0);
   if (withQuestions.length > 0) {
-    lines.push("", "Application questions to answer IN CHAT (they do not go in any document):");
+    lines.push("", "Application questions — answer these IN CHAT, grouped by company; they go in no document:");
     for (const j of withQuestions) {
       lines.push(`  ${j.company} — ${j.position}:`);
       for (const q of j.questions ?? []) lines.push(`    • ${q}`);
     }
-    lines.push(
-      "  Answer each in first person, 3-6 sentences, grounded only in the master CV, referencing the",
-      "  company and role concretely. Group the answers by company in your reply.",
-    );
+    lines.push("  First person, 3-6 sentences each, grounded only in the master CV, concrete about the role.");
   }
 
-  if (plan.chunks.length > 0) {
-    lines.push(
-      "",
-      `Write TailoredContent JSON ONLY for the ${plan.reasoningPasses} job(s) marked GENERATE` +
-        (plan.needsGeneration.length ? ` (original indices: ${plan.needsGeneration.join(", ")})` : "") +
-        ". Leave `content` out of every reuse job — pass its `reuseFrom` exactly as printed and the server",
-      "resolves the content itself. Each job produces a résumé and, when you pass `coverLetter`, a cover",
-      "letter — all logged to the tracker automatically.",
-      "If a chunk reports a failure, fix and re-send just that job; already-rendered jobs are skipped on a re-run.",
-    );
-  }
+  lines.push(
+    "",
+    "Cover letters and question answers are read by a person, not an ATS: load the `humane-writing` skill if this",
+    "session has it and run its checklist over each one. Every specific detail — a system, a number, an artifact —",
+    "must already be in the master CV. Résumé bullets are exempt; they stay provenance-locked rewrites.",
+    "",
+    `Write TailoredContent for the ${plan.reasoningPasses} GENERATE job(s) only` +
+      (generateRefs ? `: ${generateRefs}` : "") +
+      ". Every job produces a résumé and, when you pass `coverLetter`, a letter — both logged to the tracker.",
+    "If a chunk reports a failure, fix and re-send just that job; already-rendered jobs are skipped on a re-run.",
+  );
   return lines.join("\n");
 }

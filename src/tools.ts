@@ -12,10 +12,19 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { config } from "./config.js";
 import { loadMasterCv, runRenderPipeline, renderApplicationSet, latexToText } from "./core/pipeline.js";
 import type { RenderOutput } from "./core/pipeline.js";
-import { buildTailoringBrief, masterCvForBrief } from "./core/brief.js";
-import { TailoredContentSchema, CoverLetterContentSchema } from "./core/schema.js";
+import { buildTailoringBrief, masterCvOutline } from "./core/brief.js";
+import { TailoredContentInputSchema, CoverLetterContentSchema } from "./core/schema.js";
 import { runCoverLetterPipeline } from "./core/coverLetter.js";
-import { planBatch, runBatch, formatPlan, MAX_BATCH_JOBS, MAX_PLAN_JOBS, DEFAULT_CHUNK_SIZE } from "./core/batch.js";
+import {
+  planBatch,
+  runBatch,
+  expandChunk,
+  formatPlan,
+  MAX_BATCH_JOBS,
+  MAX_PLAN_JOBS,
+  DEFAULT_CHUNK_SIZE,
+} from "./core/batch.js";
+import type { BatchRenderItem, ChunkContribution } from "./core/batch.js";
 import { extractKeywords, scoreCoverage, keywordGap } from "./core/keywords.js";
 import { recordApplication, listApplications } from "./core/tracker.js";
 import { syncRepo, commitAndPush, parseProject, redact, OverleafAccessError } from "./core/overleafGit.js";
@@ -128,7 +137,7 @@ export function registerTools(server: McpServer): void {
     async () =>
       guard(async () => {
         const cv = await loadMasterCv();
-        return ok(JSON.stringify(masterCvForBrief(cv), null, 2));
+        return ok(masterCvOutline(cv));
       }),
   );
 
@@ -202,8 +211,13 @@ export function registerTools(server: McpServer): void {
         "typography. The response warns when the page is under-filled. " +
         "Returns provenance warnings and an ATS coverage report.",
       inputSchema: {
-        content: TailoredContentSchema.describe("The tailored content JSON produced from the brief"),
-        cvContent: TailoredContentSchema.optional().describe(
+        content: TailoredContentInputSchema.describe(
+          "The tailored content JSON produced from the brief. Send only what you decided: an unchanged bullet " +
+            'is just its id ("EXP1.2"), an education entry or a whole skill category is just its id, and entry ' +
+            "headings (title, organization, dates, project name/url/stack) are copied from the master CV unless " +
+            "you pass a replacement.",
+        ),
+        cvContent: TailoredContentInputSchema.optional().describe(
           "Optional fuller content for the CV (more roles/projects). Defaults to the résumé content.",
         ),
         alsoCv: z.boolean().optional().describe("Also render a separate CV from your templates/cv.tex (default false)"),
@@ -388,8 +402,9 @@ export function registerTools(server: McpServer): void {
         "the tracker (nothing is regenerated or overwritten), clusters the rest by keyword similarity and " +
         "checks a cross-session cache so similar roles share one reasoning pass, and splits the remaining work " +
         `into chunks of ${DEFAULT_CHUNK_SIZE} — one batch_render call each, so no single call can time out. ` +
-        "The output names the exact jobs needing fresh TailoredContent and the exact reuseFrom value for the " +
-        "rest. Call this BEFORE writing any content for a multi-job request, and follow its chunks exactly.",
+        "The output names the exact jobs needing fresh TailoredContent, and returns a planId: pass it back to " +
+        "batch_render with a chunk number and each job's ref, so the postings and reuse wiring never travel " +
+        "twice. Call this BEFORE writing any content for a multi-job request, and follow its chunks exactly.",
       inputSchema: {
         jobs: z
           .array(
@@ -434,30 +449,43 @@ export function registerTools(server: McpServer): void {
       description:
         `Render, compile, auto-log, and cache one CHUNK of jobs — ${DEFAULT_CHUNK_SIZE} per call, ` +
         `${MAX_BATCH_JOBS} absolute maximum. For a bigger batch call this repeatedly, once per chunk from ` +
-        "batch_plan, waiting for each call to return; do not merge chunks. Each job produces a résumé (plus a " +
-        "cover letter when `coverLetter` is given), logged as one tracker row. Supply `content` only for jobs " +
-        "batch_plan marked GENERATE; for the rest pass `reuseFrom` (the index within THIS call, or a cache key) " +
-        "and the server resolves the content itself. Jobs already in the tracker are SKIPPED, not overwritten, " +
-        "so re-sending a list only fills in what is missing — pass `force` to rebuild anyway. One bad job never " +
-        "fails the call; each is reported on its own.",
+        "batch_plan, waiting for each call to return; do not merge chunks. Preferred form: pass the `planId` " +
+        "batch_plan printed plus the `chunk` number, and give each job only its `ref` and the content you " +
+        "wrote — company, position, job description, template and reuse wiring all come off the stored plan, " +
+        "so nothing is sent twice. Without a planId, send each job in full (company and position required). " +
+        "Supply `content` only for jobs the plan marked GENERATE; the rest resolve from `reuseFrom`. Each job " +
+        "produces a résumé (plus a cover letter when `coverLetter` is given), logged as one tracker row. Jobs " +
+        "already in the tracker are SKIPPED, not overwritten, so re-sending a list only fills in what is " +
+        "missing — pass `force` to rebuild anyway. One bad job never fails the call; each is reported on its own.",
       inputSchema: {
+        planId: z
+          .string()
+          .optional()
+          .describe('Plan handle from batch_plan, e.g. "plan-ab12cd34" — then each job needs only ref + content'),
+        chunk: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("Which chunk of that plan this call renders (required with planId)"),
         jobs: z
           .array(
             z.object({
-              company: z.string(),
-              position: z.string(),
+              ref: z.number().int().min(0).optional().describe("With planId: the job's ref as the plan printed it"),
+              company: z.string().optional().describe("Required only without a planId"),
+              position: z.string().optional().describe("Required only without a planId"),
               jobUrl: z.string().optional(),
-              jobDescription: z.string().optional().describe("For ATS scoring and caching"),
+              jobDescription: z.string().optional().describe("For ATS scoring and caching; comes off the plan with a planId"),
               template: z.enum(["resume", "cv"]).optional(),
-              content: TailoredContentSchema.optional().describe("Required for GENERATE jobs"),
+              content: TailoredContentInputSchema.optional().describe("Required for GENERATE jobs"),
               reuseFrom: z
                 .union([z.number(), z.string()])
                 .optional()
-                .describe("Index within THIS call, or a cache key, to copy content from — exactly as batch_plan printed it"),
+                .describe("Without a planId: index within THIS call, or a cache key, to copy content from"),
               summary: z.string().optional().describe("Role-specific summary override when reusing content"),
               headerLine: z.string().optional(),
               coverLetter: CoverLetterContentSchema.optional().describe("Produced alongside the résumé for this job"),
-              cvContent: TailoredContentSchema.optional().describe("Optional fuller CV content; defaults to the résumé content"),
+              cvContent: TailoredContentInputSchema.optional().describe("Optional fuller CV content; defaults to the résumé content"),
               alsoCv: z.boolean().optional().describe("Also render a separate CV from your templates/cv.tex (default false)"),
               force: z.boolean().optional().describe("Rebuild this job even if the tracker already has it"),
             }),
@@ -470,9 +498,30 @@ export function registerTools(server: McpServer): void {
           .describe("Rebuild every job even if the tracker already has it (default false — those are skipped)"),
       },
     },
-    async ({ jobs, force }) =>
+    async ({ planId, chunk, jobs, force }) =>
       guard(async () => {
-        const r = await runBatch(jobs as never, { force });
+        let items: BatchRenderItem[];
+        let refs: number[] = [];
+        if (planId?.trim()) {
+          if (chunk === undefined) {
+            return fail("`chunk` is required with `planId` — batch_plan prints one call per chunk, numbered from 1.");
+          }
+          const unref = jobs.filter((j) => j.ref === undefined);
+          if (unref.length > 0) {
+            return fail(
+              `Every job needs a \`ref\` when \`planId\` is given (${unref.length} had none). ` +
+                "Use the ref numbers batch_plan printed, or drop planId and send each job in full.",
+            );
+          }
+          items = await expandChunk(planId, chunk, jobs as ChunkContribution[]);
+          // Report jobs by the ref the plan printed, not by their position in
+          // this call, so a follow-up ("re-send #4") addresses the same job.
+          refs = jobs.map((j) => j.ref!);
+        } else {
+          items = jobs as BatchRenderItem[];
+        }
+        const label = (index: number): string => `#${refs[index] ?? index}`;
+        const r = await runBatch(items, { force });
         const lines = [
           `Chunk complete — ${r.succeeded}/${r.results.length} rendered ` +
             `(${r.generated} generated, ${r.reused} reused)` +
@@ -481,10 +530,10 @@ export function registerTools(server: McpServer): void {
         ];
         for (const j of r.results) {
           if (j.skipped) {
-            lines.push(`  ⏭  #${j.index} ${j.company} — ${j.position}: ${j.note}`);
+            lines.push(`  ⏭  ${label(j.index)} ${j.company} — ${j.position}: ${j.note}`);
           } else if (j.ok) {
             lines.push(
-              `  ✅ #${j.index} ${j.company} — ${j.position}` +
+              `  ✅ ${label(j.index)} ${j.company} — ${j.position}` +
                 `${j.pageCount ? ` (${j.pageCount}p)` : ""}` +
                 `${j.atsPercent !== undefined ? ` · ATS ${j.atsPercent}%` : ""}` +
                 `${j.source === "reused" ? " · reused" : ""}` +
@@ -496,7 +545,7 @@ export function registerTools(server: McpServer): void {
             if (j.note) lines.push(`       ℹ️  ${j.note}`);
             for (const w of j.warnings) lines.push(`       ⚠️  ${w}`);
           } else {
-            lines.push(`  ❌ #${j.index} ${j.company} — ${j.position}: ${j.error}`);
+            lines.push(`  ❌ ${label(j.index)} ${j.company} — ${j.position}: ${j.error}`);
           }
         }
         if (r.failed > 0) {
