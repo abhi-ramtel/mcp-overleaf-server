@@ -205,7 +205,8 @@ export function registerTools(server: McpServer): void {
         "anything compiles. Always pass `coverLetter` unless the user opted out; a user field such as " +
         "`CoverLetter: false` is an explicit opt-out, so do not pass it in that case. " +
         "A separate CV is NOT generated unless you pass alsoCv:true and configure your own CV template. " +
-        "Start with four relevant experience entries and three relevant projects when available, using 3 sourced " +
+        "Anchor the content on one theme from the job description and keep every number from the cited source " +
+        "bullets. Start with four relevant experience entries and three relevant projects when available, using 3 sourced " +
         "bullets for each selected entry that has enough source evidence (normally 21 bullets). Only trim after " +
         "the actual PDF exceeds one page; preserve master-CV skill labels and the template's standard professional " +
         "typography. The response warns when the page is under-filled. " +

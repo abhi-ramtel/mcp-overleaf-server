@@ -69,8 +69,16 @@ This is the credit-efficient path; don't write content per job blindly.
    `sourceId` for every bullet and entry, and send only what you decided — a bullet
    you kept is just its id (`"EXP1.2"`), an education entry or an untrimmed skill
    category is just its id, and entry headings (title, organization, dates, project
-   name/url/stack) come from the master CV unless you override them. Fill the page
-   naturally: three bullets per
+   name/url/stack) come from the master CV unless you override them. **Anchor each
+   role family on one theme** from its postings that the master CV supports best
+   (low-latency systems, AI infrastructure, distributed backend, ...): the summary
+   opens with it, on-theme bullets and projects come first, skills lead with it, and
+   off-theme work (frontend, IT support) appears only through its on-theme angle.
+   **Lead with measurable impact:** prefer source bullets that carry numbers, keep
+   every number they carry, and frame the rest as concrete system-level outcomes
+   (latency, throughput, scale, reliability). Never invent a figure. The theme
+   decides which entries fill the page, not how many. Fill the page naturally: three
+   bullets per
    experience entry, four relevant experience entries when the master CV contains
    them, and three sourced bullets for the two or three projects most relevant to the
    role (at least two for every other project). Keep top-level skill category labels
@@ -147,8 +155,10 @@ to writing directly into `output/`, and moving mid-batch risks a later chunk's
 
 ## Step 5 — report
 
-A short table: company, position, pages, ATS %, and generated / reused / skipped
-(already done). Revise only the jobs that came back with warnings or more than one page.
+A short table: company, position, theme, pages, ATS %, and generated / reused /
+skipped (already done). Revise only the jobs that came back with warnings or more than
+one page. Below it, list the bullets that still have no measurable outcome and the kind
+of metric the user could add to `cv.md` for each. Ask; never assume a value.
 
 Then answer any application questions **in chat**, grouped under each company —
 first person, 3–6 sentences, grounded only in the master CV, concrete about that

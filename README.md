@@ -138,7 +138,10 @@ Please tailor my résumé for the job below and create a matching cover letter w
 
 Use my master cv.md and my existing LaTeX template. First read the tailoring brief,
 then select, reorder, and rewrite only accomplishments that are supported by my CV.
-Do not invent experience, skills, employers, projects, or numbers. Start with four
+Do not invent experience, skills, employers, projects, or numbers. Anchor the résumé on
+the one theme from this job that my CV supports best (for example low-latency systems or
+AI infrastructure) and keep off-theme work out of the way. Keep every number from my
+source bullets and frame the rest as concrete system-level outcomes. Start with four
 relevant experience entries and three relevant projects when my CV supports them, with
 three distinct sourced bullets for every selected entry that has that much evidence.
 Do not cut this baseline merely because it appears likely to fit on one page. Preserve
@@ -361,6 +364,7 @@ Every render **auto-logs**, upserting on company+position — regenerating updat
 - **Host-model reasoning, not a server-side LLM.** The MCP client already has a capable model; calling an API server-side would need a key, double the cost, and duplicate the model. The server hands the model a structured brief and renders the JSON it returns. No key required.
 - **Template injection, never LLM-generated LaTeX.** The renderer is the only component that emits LaTeX, and it escapes every field. Your macros and typography survive exactly.
 - **Anti-fabrication by construction.** Every source bullet gets a stable id (`EXP1.2`). The model must cite one per bullet; unknown ids are a hard failure, and new numbers / off-CV skills become warnings. Cover letters get a prose-tuned variant that flags unverifiable figures. See `src/core/schema.ts`.
+- **One theme, measurable impact.** A résumé that tries to cover full-stack, backend, systems, and AI at once reads as scattered. The brief has the model pick one theme from the job description, open the summary with it, and choose and frame every entry to support it. It also lists the source bullets that already carry metrics, so real numbers lead instead of getting rewritten away. Bullets with no number are framed as concrete system-level outcomes, and the reply lists them so you can add real metrics to `cv.md`. See `src/core/brief.ts`.
 - **Reuse over regeneration.** Deterministic Jaccard similarity over JD keywords decides what can be reused — no model call is needed to decide what to skip. See `src/core/batch.ts`.
 - **Idempotent batches, chunked work.** The tracker is the record of what's done, so re-running a list rebuilds nothing and a half-finished batch resumes by re-submitting it. Work is handed back in groups of three rather than one long call, because a call long enough to time out is what actually loses a batch — and chunking is what lets one run exceed the ten-job per-call ceiling.
 - **Graceful Overleaf degradation.** No git access (a paid feature) returns a normal "unavailable" result, not an error, and the failure is cached so the token is never re-spent.
