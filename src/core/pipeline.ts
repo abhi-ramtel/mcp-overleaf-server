@@ -11,7 +11,8 @@ import { existsSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { config } from "../config.js";
 import { parseCvFile } from "./cvParser.js";
-import { TailoredContentSchema, checkProvenance } from "./schema.js";
+import { TailoredContentInputSchema, checkProvenance } from "./schema.js";
+import { hydrateContent } from "./tailoring.js";
 import type { TailoredContent, ProvenanceReport } from "./schema.js";
 import type { MasterCv } from "./types.js";
 import { renderTemplate } from "./latexRenderer.js";
@@ -230,8 +231,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     : outputBaseName(input.company, input.position, input.template === "cv" ? "cv" : "resume");
 
   // 1. Validate the shape.
-  let content: TailoredContent;
-  const parsed = TailoredContentSchema.safeParse(input.content);
+  const parsed = TailoredContentInputSchema.safeParse(input.content);
   if (!parsed.success) {
     return {
       ok: false,
@@ -243,10 +243,23 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
         .join("\n")}`,
     };
   }
-  content = parsed.data;
 
-  // 2. Provenance — hard-fail on unknown ids (anti-fabrication).
+  // 2. Fill in everything the host left out because the master CV already has
+  // it — unchanged bullets, entry headings, whole skill categories.
   const master = await loadMasterCv();
+  const hydrated = hydrateContent(master, parsed.data);
+  if (hydrated.errors.length > 0) {
+    return {
+      ok: false,
+      outputBase: base,
+      templateSource: "",
+      provenance: { ok: false, errors: hydrated.errors, warnings: [] },
+      error: `Content cites ids the master CV does not have:\n${hydrated.errors.map((e) => `  • ${e}`).join("\n")}`,
+    };
+  }
+  const content: TailoredContent = hydrated.content;
+
+  // 3. Provenance — hard-fail on unknown ids (anti-fabrication).
   const provenance = checkProvenance(master, content);
   if (!provenance.ok) {
     return {
@@ -260,7 +273,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     };
   }
 
-  // 3. Render. A finished document (no {{placeholders}}, native \roleheading/\bul
+  // 4. Render. A finished document (no {{placeholders}}, native \roleheading/\bul
   // macros) gets section-body injection that preserves its formatting; a
   // {{token}} template gets the placeholder renderer.
   const { tex: template, source: templateSource } = await resolveTemplate({
@@ -276,7 +289,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     tex = renderTemplate(template, master, content, renderOpts);
   }
 
-  // 4. Structural validation.
+  // 5. Structural validation.
   const validation = validateTex(tex);
   if (!validation.valid) {
     return {
@@ -289,7 +302,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     };
   }
 
-  // 5. Write .tex + compile.
+  // 6. Write .tex + compile.
   await mkdir(config.outputDir, { recursive: true });
   const texPath = join(config.outputDir, `${base}.tex`);
   await writeFile(texPath, tex, "utf-8");
@@ -318,7 +331,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     }
   }
 
-  // 6. ATS coverage (optional).
+  // 7. ATS coverage (optional).
   if (input.jobDescription?.trim()) {
     const keywords = extractKeywords(input.jobDescription);
     const text = latexToText(tex);
@@ -328,7 +341,7 @@ export async function runRenderPipeline(input: RenderInput): Promise<RenderOutpu
     out.ats = { percent: cov.percent, matched: cov.matched, missing: cov.missing, gap };
   }
 
-  // 7. Auto-log to the tracker so no application goes unrecorded. Upserts on
+  // 8. Auto-log to the tracker so no application goes unrecorded. Upserts on
   //    company+position, so re-running a job updates its row instead of duplicating.
   const canTrack = Boolean(input.company?.trim() && input.position?.trim());
   if (canTrack && input.autoTrack !== false) {

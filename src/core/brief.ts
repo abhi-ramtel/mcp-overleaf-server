@@ -22,38 +22,47 @@ export interface BriefOptions {
   questions?: string[];
 }
 
-/** Compact, id-annotated view of the master CV the host must draw from. */
-export function masterCvForBrief(cv: MasterCv): unknown {
-  return {
-    contact: cv.contact,
-    summary: { id: "SUM", text: cv.summary },
-    experience: cv.experience.map((e) => ({
-      id: e.id,
-      title: e.title,
-      organization: e.organization,
-      location: e.location,
-      dates: e.dates,
-      bullets: e.bullets.map((b) => ({ id: b.id, text: b.text })),
-    })),
-    projects: cv.projects.map((p) => ({
-      id: p.id,
-      name: p.name,
-      url: p.url,
-      stack: p.stack,
-      dates: p.dates,
-      bullets: p.bullets.map((b) => ({ id: b.id, text: b.text })),
-    })),
-    education: cv.education.map((ed) => ({
-      id: ed.id,
-      institution: ed.institution,
-      degree: ed.degree,
-      dates: ed.dates,
-      location: ed.location,
-      coursework: ed.coursework,
-      honors: ed.honors,
-    })),
-    skills: cv.skills.map((s) => ({ id: s.id, category: s.category, items: s.items })),
-  };
+/**
+ * Terse, id-tagged view of the master CV — the payload the host model draws
+ * from on every tailoring pass.
+ *
+ * The format is chosen for size, not prettiness: the same content as
+ * pretty-printed JSON runs ~35 KB (~8.7k tokens), nearly half of it repeated
+ * object keys and indentation, and it is re-sent with every brief. Pipe-
+ * delimited lines carry the same fields and the same ids at roughly half that.
+ * A blank field means the master CV has none.
+ */
+export function masterCvOutline(cv: MasterCv): string {
+  const row = (...fields: (string | undefined)[]): string =>
+    fields.map((f) => (f ?? "").trim()).join(" | ");
+  const bullets = (entry: { bullets: { id: string; text: string }[] }): string[] =>
+    entry.bullets.map((b) => `  ${b.id} ${b.text}`);
+
+  const contact = [cv.contact.name, cv.contact.email, cv.contact.phone]
+    .concat(cv.contact.links.map((l) => `${l.label} <${l.url}>`))
+    .filter((f): f is string => !!f && f.trim().length > 0);
+
+  const lines: string[] = [`CONTACT | ${contact.join(" | ")}`, `SUM | ${cv.summary}`];
+
+  lines.push("", "EXPERIENCE — id | title | organization | location | dates");
+  for (const e of cv.experience) {
+    lines.push(row(e.id, e.title, e.organization, e.location, e.dates), ...bullets(e));
+  }
+
+  lines.push("", "PROJECTS — id | name | url | stack | dates");
+  for (const p of cv.projects) {
+    lines.push(row(p.id, p.name, p.url, p.stack, p.dates), ...bullets(p));
+  }
+
+  lines.push("", "EDUCATION — id | institution | degree | dates | location | coursework | honors");
+  for (const ed of cv.education) {
+    lines.push(row(ed.id, ed.institution, ed.degree, ed.dates, ed.location, ed.coursework, ed.honors));
+  }
+
+  lines.push("", "SKILLS — id | category | items");
+  for (const s of cv.skills) lines.push(row(s.id, s.category, s.items.join(", ")));
+
+  return lines.join("\n");
 }
 
 const RULES = `## Absolute rules (truthfulness > keyword matching)
@@ -110,7 +119,8 @@ technology without its result undersells the work.
   restructuring ..."), and never soften a real figure into "improved
   performance".
 - When choosing among an entry's source bullets, prefer the ones listed under
-  "Quantified source bullets" below. Carry a number only from the bullet you
+  "Quantified source bullets" below; sending one as just its id keeps its
+  number exactly as written. Carry a number only from the bullet you
   cite as its sourceId; the provenance check compares numbers per cited bullet.
 - Shape each bullet as action + system + technique + measurable outcome. Name
   the technique that produced the result (multithreading, shared memory,
@@ -193,46 +203,55 @@ const PRESENTATION_GUIDANCE = `## Presentation and skills fidelity
   a relevant role or project merely because it is less central than the top
   match. Do not fill space with keyword lists or weak bullets.`;
 
+const VOICE_GUIDANCE = `## Voice — the prose a person actually reads
+
+The summary, the cover letter, and any application-question answers are read by a
+human, not an ATS. Load the \`humane-writing\` skill if this session has it and run
+its pre-send checklist over each of them. Without it, at minimum: no em dashes
+unless the interruption is the point, no "not just X, it's Y" framing, no
+three-item lists, none of leverage / robust / seamless / passionate / proven track
+record / extensive experience, no "In today's ..." opener, and no closer a form
+letter could carry. Vary sentence length.
+
+Specificity is what replaces all that, and it comes from the master CV only: name
+a system, a number, or an artifact already recorded there. Never invent a figure
+to sound concrete — every number absent from the CV is flagged for review.
+
+Résumé bullets are exempt. They are provenance-locked rewrites of master-CV lines;
+write them to the rules above this section instead.`;
+
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 
+Send only what you decided. Anything the master CV already holds is filled in by
+id — do not copy it back:
+
+- a bullet you kept as-is is just its id: "EXP1.2"
+- a bullet you rewrote is { "text": "...", "sourceId": "EXP1.2" }
+- an entry's title / organization / location / dates — and a project's name, url
+  and stack — come from the entry its sourceId names. Include one only to
+  override it. Project links are preserved automatically.
+- an education entry is normally just its id: "EDU1"
+- a skill category kept whole is just its id: "SKL3". To trim its items, send
+  { "category": "...", "items": [...] } keeping the master CV's own label.
+
 {
-  "summary": "string — 2-3 lines, opening with the one theme chosen for this role",
+  "summary": "string — 2-3 lines, opening with the one theme chosen for this role (always your own words)",
   "experience": [
     {
-      "sourceId": "EXP1",                // master experience entry id
-      "title": "string",
-      "organization": "string",
-      "location": "string (optional)",
-      "dates": "string",
-      "bullets": [
-        { "text": "rewritten bullet", "sourceId": "EXP1.2" }
-      ]
+      "sourceId": "EXP1",
+      "bullets": ["EXP1.1", { "text": "rewritten bullet", "sourceId": "EXP1.3" }]
     }
   ],
   "projects": [
-    {
-      "sourceId": "PRJ2",
-      "name": "string",
-      "url": "string (optional) — copy the project's url from the master CV verbatim so the PDF keeps the link",
-      "stack": "string (comma-separated tech)",
-      "dates": "string",
-      "bullets": [ { "text": "...", "sourceId": "PRJ2.1" } ]
-    }
+    { "sourceId": "PRJ2", "bullets": ["PRJ2.1", { "text": "...", "sourceId": "PRJ2.2" }] }
   ],
-  "education": [
-    {
-      "sourceId": "EDU1",
-      "institution": "string",
-      "degree": "string",
-      "dates": "string",
-      "location": "string (optional)",
-      "coursework": "string (optional)",
-      "honors": "string (optional)"
-    }
-  ],
-  "skills": [ { "category": "string", "items": ["string", "..."] } ],
+  "education": ["EDU1"],
+  "skills": ["SKL1", { "category": "Cloud & Infrastructure", "items": ["AWS", "Docker"] }],
   "application": { "company": "...", "position": "...", "jobUrl": "..." }
-}`;
+}
+
+Every id must trace back to the master CV above; the server rejects any it
+cannot resolve.`;
 
 /** Assemble the full brief as markdown text. */
 export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
@@ -243,7 +262,8 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
   const coverLetterInstruction =
     opts.coverLetter === false
       ? " The user explicitly set CoverLetter:false. Do NOT pass `coverLetter` to `render_and_compile` and do not generate a cover letter."
-      : " Also pass a CV-grounded `coverLetter` unless the user explicitly opts out; this produces the matching letter in the same call.";
+      : " Also pass a CV-grounded `coverLetter` unless the user explicitly opts out, written to the Voice section " +
+        "above; this produces the matching letter in the same call.";
   const nextStep =
     "Produce the TailoredContent JSON, then call `render_and_compile` with it, passing " +
     `template="${opts.template ?? "resume"}"` +
@@ -269,6 +289,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
     IMPACT_GUIDANCE,
     ATS_GUIDANCE,
     PRESENTATION_GUIDANCE,
+    VOICE_GUIDANCE,
     ["## Job description", "", "```", opts.jobDescription.trim(), "```"].join("\n"),
     [
       "## JD keyword signals (deterministic)",
@@ -286,7 +307,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
         ? quantified.join(", ")
         : "(none: no source bullet carries a measurable outcome, so frame concrete system-level outcomes and tell the user which metrics to add to cv.md)",
     ].join("\n"),
-    ["## Master CV (draw only from this; cite these ids)", "", "```json", JSON.stringify(masterCvForBrief(cv), null, 2), "```"].join("\n"),
+    ["## Master CV (draw only from this; cite these ids)", "", "```", masterCvOutline(cv), "```"].join("\n"),
     SCHEMA_DOC,
   );
 
@@ -298,7 +319,7 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
         "The portal asks the following. Draft an answer for each, then show them in your reply so they can be",
         "pasted into the application. Rules:",
         "",
-        "- First person, 3-6 sentences, specific and plain — no corporate filler.",
+        "- First person, 3-6 sentences, specific and plain. Apply the Voice section above: a person reads these.",
         "- Ground every claim in the master CV above. Do not invent employers, projects, or figures.",
         "- Reference this company and role concretely, using details from the job description.",
         "- If a question asks about preferences, working style, or motivation, answer honestly from what the CV",

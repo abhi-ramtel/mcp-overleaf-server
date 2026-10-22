@@ -71,6 +71,76 @@ export const TailoredContentSchema = z.object({
   application: ApplicationMetaSchema.optional(),
 });
 
+/* ── Input shorthand ────────────────────────────────────────────────────────
+ *
+ * What the host model is allowed to SEND. Anything the server can look up from
+ * the master CV by sourceId may be omitted: an unchanged bullet is just its id,
+ * an entry's title/organization/dates are copied from the entry its sourceId
+ * names, and a skill category is just "SKL3". `hydrateContent` expands this
+ * into the strict TailoredContent above before provenance and rendering.
+ *
+ * This exists purely to stop the model re-emitting verbatim copies of the
+ * master CV on every tailoring pass — roughly a third of a generated résumé.
+ */
+
+export const TailoredBulletInputSchema = z.union([
+  z.string().min(1).describe('just the master-CV bullet id, e.g. "EXP1.2" — sends that bullet unchanged'),
+  z.object({
+    sourceId: z.string().min(1).describe("id of the master-CV bullet this was rewritten from"),
+    text: z.string().min(1).optional().describe("the rewrite; omit to use the master bullet verbatim"),
+  }),
+]);
+
+/** Fields left out are copied from the master entry `sourceId` names. */
+export const TailoredExperienceInputSchema = z.object({
+  sourceId: z.string().min(1).describe("master experience entry id, e.g. EXP1"),
+  title: z.string().optional(),
+  organization: z.string().optional(),
+  location: z.string().optional(),
+  dates: z.string().optional(),
+  bullets: z.array(TailoredBulletInputSchema).min(1),
+});
+
+export const TailoredProjectInputSchema = z.object({
+  sourceId: z.string().min(1).describe("master project entry id, e.g. PRJ2"),
+  name: z.string().optional(),
+  url: z.string().optional(),
+  stack: z.string().optional(),
+  dates: z.string().optional(),
+  bullets: z.array(TailoredBulletInputSchema).min(1),
+});
+
+/** An education entry is normally pure passthrough — usually just its id. */
+export const TailoredEducationInputSchema = z.union([
+  z.string().min(1).describe('just the master-CV entry id, e.g. "EDU1"'),
+  z.object({
+    sourceId: z.string().min(1).describe("master education entry id, e.g. EDU1"),
+    institution: z.string().optional(),
+    degree: z.string().optional(),
+    dates: z.string().optional(),
+    location: z.string().optional(),
+    coursework: z.string().optional(),
+    honors: z.string().optional(),
+  }),
+]);
+
+export const TailoredSkillInputSchema = z.union([
+  z.string().min(1).describe('just the master-CV skill category id, e.g. "SKL3" — sends that category unchanged'),
+  TailoredSkillCategorySchema.describe("a reordered or filtered selection of that category's existing items"),
+]);
+
+export const TailoredContentInputSchema = z.object({
+  summary: z.string().min(1),
+  experience: z.array(TailoredExperienceInputSchema).default([]),
+  projects: z.array(TailoredProjectInputSchema).default([]),
+  education: z.array(TailoredEducationInputSchema).default([]),
+  skills: z.array(TailoredSkillInputSchema).default([]),
+  application: ApplicationMetaSchema.optional(),
+});
+
+export type TailoredBulletInput = z.infer<typeof TailoredBulletInputSchema>;
+export type TailoredContentInput = z.infer<typeof TailoredContentInputSchema>;
+
 export type TailoredBullet = z.infer<typeof TailoredBulletSchema>;
 export type TailoredExperience = z.infer<typeof TailoredExperienceSchema>;
 export type TailoredProject = z.infer<typeof TailoredProjectSchema>;

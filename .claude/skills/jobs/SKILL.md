@@ -2,7 +2,7 @@
 name: jobs
 description: Collect several job postings through an in-chat form, then tailor a résumé and cover letter for each one. Use when the user wants to apply to more than one job at once, mentions a batch of jobs, asks for a job entry form, or says something like "I have 4 jobs to apply to".
 argument-hint: "[number of jobs]"
-allowed-tools: mcp__visualize__read_me, mcp__visualize__show_widget, mcp__overleaf-resume__batch_plan, mcp__overleaf-resume__batch_render, mcp__overleaf-resume__get_master_cv, Read
+allowed-tools: mcp__visualize__read_me, mcp__visualize__show_widget, mcp__overleaf-resume__batch_plan, mcp__overleaf-resume__batch_render, mcp__overleaf-resume__get_master_cv, Read, Skill
 ---
 
 # Multi-job entry
@@ -66,27 +66,39 @@ This is the credit-efficient path; don't write content per job blindly.
    jobs already in the tracker, clusters similar roles, checks the cross-session cache,
    and splits the remaining work into chunks of three — one `batch_render` call each.
 2. Write `TailoredContent` JSON **only** for the jobs marked GENERATE. Cite a
-   `sourceId` for every bullet and entry. **Anchor each role family on one theme**
-   from its postings that the master CV supports best (low-latency systems, AI
-   infrastructure, distributed backend, ...): the summary opens with it, on-theme
-   bullets and projects come first, skills lead with it, and off-theme work
-   (frontend, IT support) appears only through its on-theme angle. **Lead with
-   measurable impact:** prefer source bullets that carry numbers, keep every number
-   they carry, and frame the rest as concrete system-level outcomes (latency,
-   throughput, scale, reliability). Never invent a figure. The theme decides which
-   entries fill the page, not how many. Fill the page naturally: three bullets per
+   `sourceId` for every bullet and entry, and send only what you decided — a bullet
+   you kept is just its id (`"EXP1.2"`), an education entry or an untrimmed skill
+   category is just its id, and entry headings (title, organization, dates, project
+   name/url/stack) come from the master CV unless you override them. **Anchor each
+   role family on one theme** from its postings that the master CV supports best
+   (low-latency systems, AI infrastructure, distributed backend, ...): the summary
+   opens with it, on-theme bullets and projects come first, skills lead with it, and
+   off-theme work (frontend, IT support) appears only through its on-theme angle.
+   **Lead with measurable impact:** prefer source bullets that carry numbers, keep
+   every number they carry, and frame the rest as concrete system-level outcomes
+   (latency, throughput, scale, reliability). Never invent a figure. The theme
+   decides which entries fill the page, not how many. Fill the page naturally: three
+   bullets per
    experience entry, four relevant experience entries when the master CV contains
    them, and three sourced bullets for the two or three projects most relevant to the
    role (at least two for every other project). Keep top-level skill category labels
    and items close to the master CV; do not invent JD-derived labels or skills. Keep
    the template's standard professional font scale, margins, and visual design — add
    evidence instead of shrinking the page. Only trim when a render reports more than
-   one page.
+   one page. The summary is prose a person reads: write it with the
+   [humane-writing](../humane-writing/SKILL.md) skill loaded, and run that skill's
+   pre-send checklist over it. Bullets are exempt — they stay provenance-locked
+   rewrites of master-CV lines.
 3. `batch_render` **once per chunk**, in the plan's order, waiting for each call to
-   return before starting the next — `content` for that chunk's generated jobs,
-   `reuseFrom` copied verbatim from the plan for the rest. Include a `coverLetter` per
-   job unless letters were opted out; reuse proof points across similar roles and vary
-   the company-specific opening. Compiling, logging, and caching happen inside each call.
+   return before starting the next. Pass the plan's `planId`, the `chunk` number, and
+   one entry per job carrying just its `ref` plus what you wrote — `content` for that
+   chunk's GENERATE jobs, nothing but the ref for the rest. Company, position, posting
+   text, template and reuse wiring are already in the plan; re-sending them is the
+   single most expensive mistake in this flow. Include a `coverLetter` per job unless
+   letters were opted out; reuse proof points across similar roles and vary the
+   company-specific opening. Every letter goes through the humane-writing checklist
+   before it is sent — a reader who has seen a thousand of these notices the pattern
+   before the content. Compiling, logging, and caching happen inside each call.
 
 **Never merge chunks into one call.** A long call is what times the server out, and
 that is the whole reason the plan hands back groups of three.
@@ -110,7 +122,36 @@ The server handles these; follow it rather than working around it.
 - **A reuse job errors with "no cached content".** The cache was cleared between plan
   and render — re-run `batch_plan` for the remaining jobs, or write content for that
   one job.
+- **`Unknown planId`.** Plans expire after eight newer ones, and the store can be
+  cleared. Re-run `batch_plan` for whatever is left and use the new handle.
 - **More than 30 jobs.** Run the first 30, report the rest, and offer a second pass.
+
+## Step 4.5 — file into a dated folder
+
+Once every chunk in the batch has rendered, move that run's output files out of
+the flat `output/` directory and into a same-day folder so `output/` doesn't
+accumulate hundreds of loose PDFs across sessions:
+
+1. `device_bash`: `mkdir -p output/YYYY-MM-DD_Applications` (today's date; if a
+   folder for today already exists from an earlier run, append `_2`, `_3`, etc.,
+   matching the existing `2026-08-09_Applications` / `2026-08-09_Applications_2`
+   precedent).
+2. `mv` every `.pdf`/`.tex` (and any `.aux`/`.log`/`.fls`/`.fdb_latexmk`/
+   `.synctex.gz` build artifact) belonging to *this run's* jobs — résumé and
+   cover letter alike — into that folder. `device_bash` cannot `rm`; if a stale
+   duplicate turns up (e.g. a cover letter re-rendered under a slightly
+   different company-name filename), `mv` it into a `_to_delete/` subfolder
+   instead of trying to delete it, and mention it in the report.
+3. `update_tracker` once per moved job, resupplying `company`/`position` and
+   setting `resumeFile` to the new relative path (e.g.
+   `2026-08-17_Applications/Yara_Software_Engineer_New_Grad.pdf`). Put the
+   cover-letter path in `notes` (e.g. `Cover letter:
+   2026-08-17_Applications/DV_Trading_Software_Engineer_CoverLetter.pdf`) since
+   `update_tracker` has no separate cover-letter-path field.
+
+Do this after the whole batch is rendered, not per chunk — some tools default
+to writing directly into `output/`, and moving mid-batch risks a later chunk's
+`reuseFrom`/cache lookups missing files that already moved.
 
 ## Step 5 — report
 
@@ -121,7 +162,9 @@ of metric the user could add to `cv.md` for each. Ask; never assume a value.
 
 Then answer any application questions **in chat**, grouped under each company —
 first person, 3–6 sentences, grounded only in the master CV, concrete about that
-company and role. They never go into a document.
+company and role. Run them through the [humane-writing](../humane-writing/SKILL.md)
+checklist too; the same person reads them and the letter. They never go into a
+document.
 
 ## If the form can't render
 
