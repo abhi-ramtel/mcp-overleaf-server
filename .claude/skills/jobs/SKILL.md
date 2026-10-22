@@ -66,7 +66,15 @@ This is the credit-efficient path; don't write content per job blindly.
    jobs already in the tracker, clusters similar roles, checks the cross-session cache,
    and splits the remaining work into chunks of three — one `batch_render` call each.
 2. Write `TailoredContent` JSON **only** for the jobs marked GENERATE. Cite a
-   `sourceId` for every bullet and entry. Fill the page naturally: three bullets per
+   `sourceId` for every bullet and entry. **Anchor each role family on one theme**
+   from its postings that the master CV supports best (low-latency systems, AI
+   infrastructure, distributed backend, ...): the summary opens with it, on-theme
+   bullets and projects come first, skills lead with it, and off-theme work
+   (frontend, IT support) appears only through its on-theme angle. **Lead with
+   measurable impact:** prefer source bullets that carry numbers, keep every number
+   they carry, and frame the rest as concrete system-level outcomes (latency,
+   throughput, scale, reliability). Never invent a figure. The theme decides which
+   entries fill the page, not how many. Fill the page naturally: three bullets per
    experience entry, four relevant experience entries when the master CV contains
    them, and three sourced bullets for the two or three projects most relevant to the
    role (at least two for every other project). Keep top-level skill category labels
@@ -106,8 +114,10 @@ The server handles these; follow it rather than working around it.
 
 ## Step 5 — report
 
-A short table: company, position, pages, ATS %, and generated / reused / skipped
-(already done). Revise only the jobs that came back with warnings or more than one page.
+A short table: company, position, theme, pages, ATS %, and generated / reused /
+skipped (already done). Revise only the jobs that came back with warnings or more than
+one page. Below it, list the bullets that still have no measurable outcome and the kind
+of metric the user could add to `cv.md` for each. Ask; never assume a value.
 
 Then answer any application questions **in chat**, grouped under each company —
 first person, 3–6 sentences, grounded only in the master CV, concrete about that

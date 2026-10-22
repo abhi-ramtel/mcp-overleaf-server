@@ -70,6 +70,79 @@ rewritten from (e.g. "EXP1.2"). Every experience/project/education entry MUST ci
 the entry id it came from (e.g. "EXP1"). The server rejects any id it cannot trace
 back to the master CV, and flags any new number or skill for review.`;
 
+const POSITIONING_GUIDANCE = `## Positioning — anchor the whole résumé on ONE theme
+
+A résumé that spans full-stack, backend, systems, and AI infrastructure at once
+reads as broad and scattered: the screener cannot tell what the core
+specialization is, and range dilutes the perceived depth in any one area.
+Clarity in the first six seconds beats breadth.
+
+- Before writing, pick ONE theme from the job description that the master CV
+  can truthfully support, e.g. low-latency / performance-critical systems,
+  AI/LLM infrastructure, distributed backend systems, or security engineering.
+  Name the theme in one line of your reply so the user can see the choice.
+- The summary opens with that theme as the candidate's identity and backs it
+  with the strongest one or two pieces of evidence. Do not list every domain the
+  candidate has touched; leave out areas this role does not need.
+- Every selected entry reinforces the theme. The theme decides WHICH entries
+  fill the page baseline below and HOW each is framed; it never shrinks the
+  baseline.
+  - Within each entry, choose and order the source bullets that show on-theme
+    work first.
+  - When choosing projects, prefer on-theme projects over off-theme ones.
+  - Off-theme work (e.g. frontend/UI or IT support on a systems résumé)
+    competes with the narrative instead of reinforcing it. If an off-theme entry
+    stays for chronology or density, use its source bullets that show the
+    on-theme angle (backend, performance, concurrency, reliability, scale,
+    security). Never invent that angle.
+- Skills: lead with the categories and items that support the theme, and drop
+  items that pull against it (e.g. frontend frameworks on a systems résumé)
+  unless the job description asks for them.`;
+
+const IMPACT_GUIDANCE = `## Measurable, system-level impact
+
+Systems and AI-infrastructure hiring teams scan for outcomes: latency,
+throughput, scale, efficiency, and reliability. A bullet that names a
+technology without its result undersells the work.
+
+- Every number in a selected source bullet must survive the rewrite. Put it
+  where it is seen, usually right after the verb ("Cut runtime <N>% by
+  restructuring ..."), and never soften a real figure into "improved
+  performance".
+- When choosing among an entry's source bullets, prefer the ones listed under
+  "Quantified source bullets" below. Carry a number only from the bullet you
+  cite as its sourceId; the provenance check compares numbers per cited bullet.
+- Shape each bullet as action + system + technique + measurable outcome. Name
+  the technique that produced the result (multithreading, shared memory,
+  vectorization, caching, memory layout) when the source names it.
+- Use the vocabulary these roles are screened on (performance benchmarking,
+  memory optimization, concurrency control, distributed-system reliability,
+  production-scale deployment) only where the source evidence shows it.
+- For a bullet whose source has no number, state the concrete system-level
+  outcome the source does describe (what got faster, scaled, or became more
+  reliable, and at what scale) instead of a task description. Do NOT invent a
+  number or a scale.
+- In your final reply, list each bullet you used that still has no measurable
+  outcome, and suggest the kind of metric the user could add to cv.md (e.g. p99
+  latency before/after, requests/sec, dataset size). Phrase these as questions
+  for the user, never as claims.`;
+
+/**
+ * A measurable outcome: a percentage, multiplier, "N+" count, money, a time or
+ * size unit, a magnitude word, or a before → after range. Bare numbers (years,
+ * versions, course codes) are deliberately not counted.
+ */
+const METRIC_RE =
+  /\$\s?\d|\d\s?(?:%|×|x\b|\+)|\d\s?(?:ms|µs|ns|sec|seconds?|minutes?|hours?|[kmgt]b)\b|\b(?:thousand|million|billion)\b|\d[\d,.]*\s+to\s+\d/i;
+
+/** Ids of experience/project bullets that already carry a measurable outcome. */
+export function quantifiedBulletIds(cv: MasterCv): string[] {
+  return [...cv.experience, ...cv.projects]
+    .flatMap((entry) => entry.bullets)
+    .filter((b) => METRIC_RE.test(b.text))
+    .map((b) => b.id);
+}
+
 const ATS_GUIDANCE = `## ATS optimization
 
 - Naturally weave in the job description's terminology and the "addable keywords"
@@ -114,16 +187,16 @@ const PRESENTATION_GUIDANCE = `## Presentation and skills fidelity
   are included. Select and reorder the existing skill items for relevance, but
   do not invent category labels or job-description-derived skills. This avoids
   provenance warnings and keeps the skills section clean and readable.
-- Prefer a focused, balanced layout: a concise 2-3 line summary, four strong
-  experience entries and three substantial projects when available. Keep that
-  evidence in the first render; do not prune a relevant role or project merely
-  because it is less central than the top match. Do not fill space with keyword
-  lists or weak bullets.`;
+- Prefer a focused, balanced layout: a concise 2-3 line summary that opens
+  with the chosen theme, four strong experience entries and three substantial
+  projects when available. Keep that evidence in the first render; do not prune
+  a relevant role or project merely because it is less central than the top
+  match. Do not fill space with keyword lists or weak bullets.`;
 
 const SCHEMA_DOC = `## Output: a single JSON object (TailoredContent)
 
 {
-  "summary": "string — 2-3 lines, tailored to the role",
+  "summary": "string — 2-3 lines, opening with the one theme chosen for this role",
   "experience": [
     {
       "sourceId": "EXP1",                // master experience entry id
@@ -177,7 +250,8 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
     (opts.company ? `, company="${opts.company}"` : "") +
     (opts.position ? `, position="${opts.position}"` : "") +
     ", and the original jobDescription (for an ATS coverage report). " +
-    "Review any provenance warnings it returns before finalizing." +
+    "Review any provenance warnings it returns before finalizing. In your reply, name the theme you " +
+    "anchored on and list any bullets that still lack a measurable outcome." +
     coverLetterInstruction;
 
   const sections: string[] = [
@@ -188,8 +262,11 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
       `Target: **${opts.position ?? "role"}** at **${opts.company ?? "company"}**${opts.jobUrl ? ` (${opts.jobUrl})` : ""}`,
     );
   }
+  const quantified = quantifiedBulletIds(cv);
   sections.push(
     RULES,
+    POSITIONING_GUIDANCE,
+    IMPACT_GUIDANCE,
     ATS_GUIDANCE,
     PRESENTATION_GUIDANCE,
     ["## Job description", "", "```", opts.jobDescription.trim(), "```"].join("\n"),
@@ -201,6 +278,13 @@ export function buildTailoringBrief(cv: MasterCv, opts: BriefOptions): string {
       `Addable (already in your master CV — safe to emphasize): ${gap.addable.join(", ") || "(none)"}`,
       "",
       `Absent (NOT in your master CV — do not add, would be fabrication): ${gap.absent.join(", ") || "(none)"}`,
+    ].join("\n"),
+    [
+      "## Quantified source bullets (prefer these; keep their numbers)",
+      "",
+      quantified.length
+        ? quantified.join(", ")
+        : "(none: no source bullet carries a measurable outcome, so frame concrete system-level outcomes and tell the user which metrics to add to cv.md)",
     ].join("\n"),
     ["## Master CV (draw only from this; cite these ids)", "", "```json", JSON.stringify(masterCvForBrief(cv), null, 2), "```"].join("\n"),
     SCHEMA_DOC,

@@ -57,9 +57,16 @@ export function registerPrompts(server: McpServer): void {
         `${n++}. Read the brief it returns. Produce ONE valid TailoredContent JSON object: reorder/rewrite ` +
           "existing bullets to fit the job, weave in truthful JD keywords, and cite the sourceId for every " +
           "bullet and entry. Do NOT invent anything or add numbers not in the source. " +
+          "ANCHOR ON ONE THEME: pick the single theme from this job that my CV supports best (e.g. low-latency " +
+          "systems, AI infrastructure, distributed backend) and make the summary, bullet choice, and skills order " +
+          "all reinforce it; off-theme work (frontend, IT support) appears only through its on-theme angle. " +
+          "LEAD WITH MEASURABLE IMPACT: keep every number from the source bullets, prefer the quantified source " +
+          "bullets the brief lists, and frame the rest as concrete system-level outcomes (latency, throughput, " +
+          "scale, reliability), never invented figures. " +
           "FILL THE PAGE NATURALLY: start with FOUR relevant experience entries and THREE relevant projects " +
           "when my master CV has them, with THREE distinct sourced bullets for every selected entry that has " +
-          "that much source evidence (normally 21 bullets total). Do not drop a role or project merely because " +
+          "that much source evidence (normally 21 bullets total). The theme decides which entries fill that " +
+          "baseline, not how many. Do not drop a role or project merely because " +
           "it is not the single best match, and do not cut content because the résumé seems likely to fit. Keep " +
           "top-level skill category labels and skill items close to the master CV; do not create new labels or " +
           "JD-derived skills. Preserve the template's standard professional type scale and margins — add useful " +
@@ -80,6 +87,9 @@ export function registerPrompts(server: McpServer): void {
           (wantLetter
             ? ""
             : " Do NOT pass `coverLetter` to render_and_compile — I opted out of a cover letter for this job."),
+        `${n++}. In your reply, tell me in one line which theme you anchored the résumé on. Then list any ` +
+          "bullet that still has no measurable outcome, with the kind of metric I could add to cv.md to " +
+          "strengthen it (e.g. latency before/after, throughput, dataset size). Ask; do not assume a value.",
       );
       if (questionList.length) {
         steps.push(
@@ -174,10 +184,17 @@ export function registerPrompts(server: McpServer): void {
           "one `batch_render` call each. Do not second-guess it: the jobs it marks SKIPPED are done, and its " +
           "chunk boundaries exist so a single call cannot time out.",
         "3. Write TailoredContent JSON ONLY for the jobs it marks GENERATE. Do not write content for the " +
-          "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry, and " +
+          "others — the server resolves theirs automatically. Cite a sourceId for every bullet and entry. " +
+          "ANCHOR EACH ROLE FAMILY ON ONE THEME from its postings that my CV supports best (e.g. low-latency " +
+          "systems, AI infrastructure, distributed backend): the summary opens with it, on-theme bullets and " +
+          "projects come first, skills lead with it, and off-theme work (frontend, IT support) appears only " +
+          "through its on-theme angle. LEAD WITH MEASURABLE IMPACT: prefer source bullets that carry numbers, " +
+          "keep every number they carry, and frame the rest as concrete system-level outcomes (latency, " +
+          "throughput, scale, reliability), never invented figures. " +
           "FILL THE PAGE NATURALLY: begin with four relevant experience entries and three relevant projects " +
           "when the master CV provides them, with three distinct sourced bullets for every selected entry that " +
-          "has that much source evidence (normally 21 bullets). Do not drop a role or project merely because it " +
+          "has that much source evidence (normally 21 bullets). The theme decides which entries fill that " +
+          "baseline, not how many. Do not drop a role or project merely because it " +
           "is not the single best match. Keep top-level skill category labels and items close to the master CV, " +
           "never inventing JD-derived labels or skills. Preserve the template's standard professional font scale, " +
           "margins, and visual design; improve density with meaningful evidence, not compressed type. Only trim " +
@@ -195,9 +212,10 @@ export function registerPrompts(server: McpServer): void {
         "5. If a chunk reports a failure, fix and re-send just that job, then carry on with the next chunk — " +
           "anything already rendered is skipped automatically, so nothing gets duplicated or overwritten. " +
           "Never restart the whole batch because of one bad job.",
-        "6. Report a short table when every chunk is done: company, position, pages, ATS %, and whether it was " +
-          "generated, reused, or skipped as already done. Only revise jobs that came back with warnings or more " +
-          "than one page.",
+        "6. Report a short table when every chunk is done: company, position, theme, pages, ATS %, and whether " +
+          "it was generated, reused, or skipped as already done. Only revise jobs that came back with warnings or " +
+          "more than one page. Below the table, list the bullets that still have no measurable outcome and the " +
+          "kind of metric I could add to cv.md for each. Ask; do not assume a value.",
         "7. If any job had application questions, answer them IN CHAT at the end, grouped under each company " +
           "heading. First person, 3-6 sentences each, grounded only in my master CV and referencing that " +
           "company and role concretely. These do not go in any document.",

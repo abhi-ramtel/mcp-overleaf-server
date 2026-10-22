@@ -55,3 +55,18 @@ test("tailor_multiple_jobs: a source location is sufficient and is read before p
   assert.match(text, /excess lower-page whitespace/);
   assert.match(text, /standard professional font scale/);
 });
+
+test("tailor_resume: anchors on one theme, leads with measured impact, and reports both", async () => {
+  const text = await getPromptText("tailor_resume", { jobDescription: JD, company: "H", position: "SE" });
+  assert.match(text, /ANCHOR ON ONE THEME/);
+  assert.match(text, /LEAD WITH MEASURABLE IMPACT/);
+  assert.match(text, /The theme decides which entries fill that baseline, not how many/);
+  assert.match(text, /tell me in one line which theme you anchored the résumé on/);
+}, { timeout: 30_000 });
+
+test("tailor_multiple_jobs: anchors each role family on one theme and reports it", async () => {
+  const text = await getPromptText("tailor_multiple_jobs", { jobs: `Company: H\nPosition: SE\n${JD}` });
+  assert.match(text, /ANCHOR EACH ROLE FAMILY ON ONE THEME/);
+  assert.match(text, /LEAD WITH MEASURABLE IMPACT/);
+  assert.match(text, /company, position, theme, pages/);
+}, { timeout: 30_000 });
